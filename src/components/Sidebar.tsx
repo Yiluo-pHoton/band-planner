@@ -1,7 +1,7 @@
-import { Music, Users, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, Music, Users, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type TabKey = 'songs' | 'members';
+export type TabKey = 'songs' | 'members' | 'rehearsal';
 
 interface NavItem {
   key: TabKey;
@@ -12,6 +12,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { key: 'songs', label: '歌曲', icon: Music },
   { key: 'members', label: '成员', icon: Users },
+  { key: 'rehearsal', label: '排练规划', icon: CalendarCheck },
 ];
 
 interface SidebarProps {
