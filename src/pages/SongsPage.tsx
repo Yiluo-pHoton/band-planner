@@ -9,7 +9,11 @@ import { SONG_STATUS_META } from '@/lib/songStatus';
 import { cn } from '@/lib/utils';
 import type { Song } from '@/types';
 
-export default function SongsPage() {
+interface SongsPageProps {
+  onSelect?: (id: string) => void;
+}
+
+export default function SongsPage({ onSelect }: SongsPageProps) {
   const { state, addSong, updateSong, deleteSong } = useApp();
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Song | undefined>(undefined);
@@ -64,7 +68,19 @@ export default function SongsPage() {
                 <tbody className="divide-y divide-zinc-200">
                   {songs.map((song) => (
                     <tr key={song.id} className="group text-sm hover:bg-zinc-50">
-                      <td className="px-4 py-3 font-medium text-zinc-900">{song.title}</td>
+                      <td className="px-4 py-3 font-medium text-zinc-900">
+                        {onSelect ? (
+                          <button
+                            type="button"
+                            onClick={() => onSelect(song.id)}
+                            className="text-left hover:underline"
+                          >
+                            {song.title}
+                          </button>
+                        ) : (
+                          song.title
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-zinc-500">{song.artist || '—'}</td>
                       <td className="px-4 py-3">
                         <span

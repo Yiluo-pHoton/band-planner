@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { Member, PersistedState, Song } from '@/types';
+import type { Assignment, Member, PersistedState, Song } from '@/types';
 import { loadState, saveState } from '@/store/persist';
 
 // Action types are union-typed so the reducer is exhaustive.
@@ -10,18 +10,28 @@ type Action =
   | { type: 'songs/delete'; id: string }
   | { type: 'members/add'; member: Member }
   | { type: 'members/update'; member: Member }
-  | { type: 'members/delete'; id: string };
+  | { type: 'members/delete'; id: string }
+  | { type: 'assignments/add'; assignment: Assignment }
+  | { type: 'assignments/update'; assignment: Assignment }
+  | { type: 'assignments/delete'; id: string };
 
 function reducer(state: PersistedState, action: Action): PersistedState {
   switch (action.type) {
     case 'songs/add':
       return { ...state, songs: [...state.songs, action.song] };
 
-    case 'songs/update':
+    case 'songs/update': {
+      // If requiredParts shrank, drop assignments for parts no longer needed.
+      // Invariant #3 in the data-model skill.
+      const allowedParts = new Set(action.song.requiredParts);
       return {
         ...state,
         songs: state.songs.map((s) => (s.id === action.song.id ? action.song : s)),
+        assignments: state.assignments.filter(
+          (a) => a.songId !== action.song.id || allowedParts.has(a.part),
+        ),
       };
+    }
 
     case 'songs/delete':
       // Cascade: drop assignments that reference this song.
@@ -58,6 +68,23 @@ function reducer(state: PersistedState, action: Action): PersistedState {
         availability: state.availability.filter((av) => av.memberId !== action.id),
       };
 
+    case 'assignments/add':
+      return { ...state, assignments: [...state.assignments, action.assignment] };
+
+    case 'assignments/update':
+      return {
+        ...state,
+        assignments: state.assignments.map((a) =>
+          a.id === action.assignment.id ? action.assignment : a,
+        ),
+      };
+
+    case 'assignments/delete':
+      return {
+        ...state,
+        assignments: state.assignments.filter((a) => a.id !== action.id),
+      };
+
     default: {
       const _exhaustive: never = action;
       return _exhaustive;
@@ -73,6 +100,9 @@ interface AppContextValue {
   addMember: (member: Member) => void;
   updateMember: (member: Member) => void;
   deleteMember: (id: string) => void;
+  addAssignment: (assignment: Assignment) => void;
+  updateAssignment: (assignment: Assignment) => void;
+  deleteAssignment: (id: string) => void;
 }
 
 const AppContext = React.createContext<AppContextValue | null>(null);
@@ -94,6 +124,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addMember: (member) => dispatch({ type: 'members/add', member }),
       updateMember: (member) => dispatch({ type: 'members/update', member }),
       deleteMember: (id) => dispatch({ type: 'members/delete', id }),
+      addAssignment: (assignment) => dispatch({ type: 'assignments/add', assignment }),
+      updateAssignment: (assignment) => dispatch({ type: 'assignments/update', assignment }),
+      deleteAssignment: (id) => dispatch({ type: 'assignments/delete', id }),
     }),
     [state],
   );
