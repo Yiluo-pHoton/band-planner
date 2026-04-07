@@ -1,11 +1,11 @@
 import * as React from 'react';
-import { Music, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Music, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SongFormDialog } from '@/components/SongFormDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
-import { SONG_STATUS_META } from '@/lib/songStatus';
+import { SONG_STATUSES, SONG_STATUS_META } from '@/lib/songStatus';
 import { cn } from '@/lib/utils';
 import type { Song } from '@/types';
 
@@ -13,11 +13,23 @@ interface SongsPageProps {
   onSelect?: (id: string) => void;
 }
 
+type SortKey = 'title' | 'artist' | 'status';
+type SortDir = 'asc' | 'desc';
+
 export default function SongsPage({ onSelect }: SongsPageProps) {
   const { state, addSong, updateSong, deleteSong } = useApp();
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Song | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = React.useState<Song | undefined>(undefined);
+  const [sort, setSort] = React.useState<{ key: SortKey; dir: SortDir } | null>(null);
+
+  const cycleSort = (key: SortKey) => {
+    setSort((cur) => {
+      if (!cur || cur.key !== key) return { key, dir: 'asc' };
+      if (cur.dir === 'asc') return { key, dir: 'desc' };
+      return null;
+    });
+  };
 
   const openCreate = () => {
     setEditing(undefined);
@@ -34,7 +46,18 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
     else addSong(song);
   };
 
-  const songs = state.songs;
+  const songs = React.useMemo(() => {
+    if (!sort) return state.songs;
+    const statusRank = (s: Song) => SONG_STATUSES.indexOf(s.status);
+    const cmp = (a: Song, b: Song): number => {
+      let v = 0;
+      if (sort.key === 'title') v = a.title.localeCompare(b.title, 'zh');
+      else if (sort.key === 'artist') v = (a.artist ?? '').localeCompare(b.artist ?? '', 'zh');
+      else if (sort.key === 'status') v = statusRank(a) - statusRank(b);
+      return sort.dir === 'asc' ? v : -v;
+    };
+    return [...state.songs].sort(cmp);
+  }, [state.songs, sort]);
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
@@ -58,9 +81,9 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
               <table className="w-full">
                 <thead className="bg-zinc-50">
                   <tr className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                    <th className="px-4 py-2 text-left">标题</th>
-                    <th className="px-4 py-2 text-left">艺人</th>
-                    <th className="px-4 py-2 text-left">状态</th>
+                    <SortableTh label="标题" sortKey="title" sort={sort} onClick={cycleSort} />
+                    <SortableTh label="艺人" sortKey="artist" sort={sort} onClick={cycleSort} />
+                    <SortableTh label="状态" sortKey="status" sort={sort} onClick={cycleSort} />
                     <th className="px-4 py-2 text-left">需要 parts</th>
                     <th className="px-4 py-2 text-right" />
                   </tr>
@@ -157,6 +180,33 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
         }}
       />
     </div>
+  );
+}
+
+interface SortableThProps {
+  label: string;
+  sortKey: SortKey;
+  sort: { key: SortKey; dir: SortDir } | null;
+  onClick: (key: SortKey) => void;
+}
+
+function SortableTh({ label, sortKey, sort, onClick }: SortableThProps) {
+  const active = sort?.key === sortKey;
+  const Icon = !active ? ArrowUpDown : sort?.dir === 'asc' ? ArrowUp : ArrowDown;
+  return (
+    <th className="px-4 py-2 text-left">
+      <button
+        type="button"
+        onClick={() => onClick(sortKey)}
+        className={cn(
+          'inline-flex items-center gap-1 hover:text-zinc-900',
+          active ? 'text-zinc-900' : 'text-zinc-500',
+        )}
+      >
+        {label}
+        <Icon className="h-3 w-3" />
+      </button>
+    </th>
   );
 }
 
