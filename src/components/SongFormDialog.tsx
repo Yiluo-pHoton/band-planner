@@ -57,13 +57,15 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: SongFo
     }
   }, [open, initial]);
 
-  const togglePart = (part: Instrument) => {
+  const partCount = (part: Instrument) =>
+    form.requiredParts.filter((p) => p === part).length;
+
+  const setPartCount = (part: Instrument, next: number) => {
+    const clamped = Math.max(0, Math.min(4, next));
     setForm((f) => {
-      const has = f.requiredParts.includes(part);
-      return {
-        ...f,
-        requiredParts: has ? f.requiredParts.filter((p) => p !== part) : [...f.requiredParts, part],
-      };
+      const others = f.requiredParts.filter((p) => p !== part);
+      const repeated: Instrument[] = Array(clamped).fill(part);
+      return { ...f, requiredParts: [...others, ...repeated] };
     });
   };
 
@@ -158,28 +160,48 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: SongFo
             <Label className="mb-1 block">
               需要的 part <span className="text-red-600">*</span>
             </Label>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {INSTRUMENTS.map((inst) => {
                 const meta = INSTRUMENT_META[inst];
-                const selected = form.requiredParts.includes(inst);
+                const count = partCount(inst);
+                const active = count > 0;
                 return (
-                  <button
-                    type="button"
+                  <div
                     key={inst}
-                    onClick={() => togglePart(inst)}
                     className={cn(
-                      'rounded-md border px-3 py-1.5 text-xs font-medium transition-colors',
-                      selected
-                        ? meta.badge
-                        : 'border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50',
+                      'flex items-center justify-between rounded-md border px-2 py-1.5',
+                      active ? meta.badge : 'border-zinc-200 bg-white',
                     )}
                   >
-                    {meta.abbrev} · {meta.label}
-                  </button>
+                    <span className={cn('text-xs font-medium', active ? '' : 'text-zinc-500')}>
+                      {meta.abbrev} · {meta.label}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPartCount(inst, count - 1)}
+                        disabled={count === 0}
+                        className="flex h-6 w-6 items-center justify-center rounded border border-zinc-200 bg-white text-sm text-zinc-700 disabled:opacity-30"
+                      >
+                        −
+                      </button>
+                      <span className="w-4 text-center text-xs font-semibold tabular-nums">
+                        {count}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPartCount(inst, count + 1)}
+                        disabled={count >= 4}
+                        className="flex h-6 w-6 items-center justify-center rounded border border-zinc-200 bg-white text-sm text-zinc-700 disabled:opacity-30"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </div>
-            <p className="text-xs text-zinc-500 mt-1">点击切换。同一 part 可在后续步骤再支持双份。</p>
+            <p className="text-xs text-zinc-500 mt-1">同一 part 可以选多份（双主唱、双吉他等）。</p>
           </div>
 
           <div>
