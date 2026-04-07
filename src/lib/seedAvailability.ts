@@ -1,115 +1,195 @@
-// Hardcoded availability seed extracted from the band status doc (2026-04).
-// Matches members by `name` string. Saturdays only, 2026-04-11 .. 2026-09-26.
+// Per-day availability seed extracted from the band status doc (2026-04).
+// Matches members by exact `name`. Range: 2026-04-11 .. 2026-09-26.
+//
+// Encoding philosophy:
+//   - Doc lists which weekdays a member can come; unlisted weekdays => unavailable.
+//   - Absence periods override everything to unavailable.
+//   - Vague "maybe absent" periods become tentative on those weeks.
+//   - Members not in SEED_RULES are untouched.
 
 import type { Availability, Member } from '@/types';
 
 type Status = Availability['status'];
+const A: Status = 'available';
 const U: Status = 'unavailable';
 const T: Status = 'tentative';
 
-const SATURDAYS = [
-  '2026-04-11', '2026-04-18', '2026-04-25',
-  '2026-05-02', '2026-05-09', '2026-05-16', '2026-05-23', '2026-05-30',
-  '2026-06-06', '2026-06-13', '2026-06-20', '2026-06-27',
-  '2026-07-04', '2026-07-11', '2026-07-18', '2026-07-25',
-  '2026-08-01', '2026-08-08', '2026-08-15', '2026-08-22', '2026-08-29',
-  '2026-09-05', '2026-09-12', '2026-09-19', '2026-09-26',
-];
+// Day-of-week constants (JS getDay: 0=Sun .. 6=Sat).
+const SUN = 0, MON = 1, TUE = 2, WED = 3, THU = 4, FRI = 5, SAT = 6;
+
+const RANGE_START = '2026-04-11';
+const RANGE_END = '2026-09-26';
 
 interface SeedRule {
   name: string;
-  entries: Array<[string, Status]>;
+  // Default status for any day not matched by an override.
+  // Usually 'unavailable' (we only know the days they CAN come).
+  fallback: Status;
+  // Weekdays they can come on (status 'available' unless overridden).
+  availableWeekdays?: number[];
+  // Weekdays they tentatively can come on.
+  tentativeWeekdays?: number[];
+  // Override windows: [startISO, endISO, status] inclusive on both ends.
+  windows?: Array<[string, string, Status]>;
+  // Per-date overrides (highest priority).
+  perDate?: Array<[string, Status]>;
 }
 
 export const SEED_RULES: SeedRule[] = [
-  // Nadie, Haifeng (Sakikoz), Serene → all available, no entries
+  {
+    name: 'Nadie',
+    fallback: U,
+    availableWeekdays: [FRI, SAT],
+  },
+  {
+    name: 'Haifeng',
+    fallback: U,
+    availableWeekdays: [MON, TUE, WED, THU, SAT],
+  },
   {
     name: 'Boran',
-    entries: [
-      ['2026-07-04', U], ['2026-07-11', U], ['2026-07-18', U], ['2026-07-25', U],
-      ['2026-08-01', U], ['2026-08-08', U], ['2026-08-15', U], ['2026-08-22', U], ['2026-08-29', U],
-    ],
+    fallback: U,
+    availableWeekdays: [MON, WED, FRI, SAT],
+    // 7-8月不在
+    windows: [['2026-07-01', '2026-08-31', U]],
   },
   {
     name: 'Ahem',
-    entries: [
-      ['2026-04-18', U], ['2026-04-25', U],
-      ['2026-05-02', U], ['2026-05-09', U], ['2026-05-16', U], ['2026-05-23', U], ['2026-05-30', U],
-      ['2026-06-06', U], ['2026-06-13', U], ['2026-06-20', U], ['2026-06-27', U],
-      ['2026-07-04', U], ['2026-07-11', U], ['2026-07-18', U], ['2026-07-25', U],
-      ['2026-08-01', U], ['2026-08-08', U], ['2026-08-15', U], ['2026-08-22', U], ['2026-08-29', U],
-      ['2026-09-05', U], ['2026-09-12', U], ['2026-09-19', U], ['2026-09-26', U],
-    ],
+    fallback: U,
+    availableWeekdays: [FRI, SAT],
+    // 4/18 - 9月 基本全程不在
+    windows: [['2026-04-18', '2026-09-26', U]],
   },
   {
     name: 'Frank',
-    entries: SATURDAYS.map((d) => [d, U] as [string, Status]),
+    fallback: U,
+    // 周六不能, 周三/周五能
+    availableWeekdays: [WED, FRI],
+    // 4月底之后离开, 9月回归
+    windows: [['2026-05-01', '2026-08-31', U]],
   },
   {
     name: 'Yibo',
-    entries: SATURDAYS.map((d) => [d, T] as [string, Status]),
+    fallback: U,
+    // 周六应该能 (uncertain), 其他待定
+    tentativeWeekdays: [SAT],
   },
   {
     name: 'Bingxue',
-    entries: [
-      ['2026-05-09', T], ['2026-05-16', T],
+    fallback: U,
+    availableWeekdays: [MON, WED, FRI, SAT],
+    // 5月可能有一至两周缺席 — 不确定哪几周, 标 tentative
+    perDate: [
+      ['2026-05-09', T],
+      ['2026-05-16', T],
     ],
   },
   {
     name: '小树',
-    entries: [
-      ['2026-05-09', U], ['2026-05-16', U], ['2026-05-23', U], ['2026-05-30', U],
-      ['2026-06-06', U], ['2026-06-13', U], ['2026-06-20', U], ['2026-06-27', U],
-      ['2026-07-04', U], ['2026-07-11', U], ['2026-07-18', U], ['2026-07-25', U],
-      ['2026-08-01', U], ['2026-08-08', U], ['2026-08-15', U], ['2026-08-22', U], ['2026-08-29', U],
-      ['2026-09-05', U], ['2026-09-12', U], ['2026-09-19', U], ['2026-09-26', U],
-    ],
+    fallback: U,
+    availableWeekdays: [FRI, SAT],
+    // 5月初之后不在
+    windows: [['2026-05-04', '2026-09-26', U]],
   },
   {
     name: 'Sky',
-    entries: [
-      ['2026-04-11', T], ['2026-04-18', T], ['2026-04-25', T],
-      ['2026-05-02', T], ['2026-05-09', T], ['2026-05-16', T],
-      ['2026-05-23', U], ['2026-05-30', U],
-      ['2026-06-06', T], ['2026-06-13', T], ['2026-06-20', T], ['2026-06-27', T],
-      ['2026-07-04', T], ['2026-07-11', T], ['2026-07-18', T], ['2026-07-25', T],
-      ['2026-08-01', T], ['2026-08-08', T], ['2026-08-15', T], ['2026-08-22', T], ['2026-08-29', T],
-      ['2026-09-05', T], ['2026-09-12', T], ['2026-09-19', T], ['2026-09-26', T],
-    ],
+    fallback: U,
+    // 周六不稳定, 周五也是
+    tentativeWeekdays: [FRI, SAT],
+    // 5/18 - 6/1 不在
+    windows: [['2026-05-18', '2026-06-01', U]],
+  },
+  {
+    name: 'Serene',
+    fallback: U,
+    availableWeekdays: [MON, TUE, WED, SAT],
   },
   {
     name: 'Sonia',
-    entries: [
-      ['2026-05-23', U], ['2026-05-30', U],
+    fallback: U,
+    availableWeekdays: [SAT],
+    tentativeWeekdays: [FRI],
+    // 5月最后两周不在
+    perDate: [
+      ['2026-05-23', U],
+      ['2026-05-30', U],
     ],
   },
   {
     name: 'Shane',
-    entries: [
-      ['2026-04-11', T], ['2026-04-18', T], ['2026-04-25', T],
+    fallback: U,
+    // 几乎能 (周六), 周日也能
+    availableWeekdays: [SAT, SUN],
+    // 4月极忙
+    perDate: [
+      ['2026-04-11', T],
+      ['2026-04-18', T],
+      ['2026-04-25', T],
     ],
   },
 ];
 
 export interface SeedReport {
-  applied: number;        // total (memberId, date) writes
-  matchedNames: string[]; // member names successfully matched
-  missingNames: string[]; // rules that did not match any member
+  applied: number;
+  matchedNames: string[];
+  missingNames: string[];
+}
+
+function toISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function eachDay(startISO: string, endISO: string): Date[] {
+  const out: Date[] = [];
+  const start = new Date(startISO + 'T00:00:00');
+  const end = new Date(endISO + 'T00:00:00');
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    out.push(new Date(d));
+  }
+  return out;
+}
+
+function statusForDate(rule: SeedRule, d: Date): Status {
+  const iso = toISO(d);
+  const dow = d.getDay();
+
+  // perDate has highest priority
+  if (rule.perDate) {
+    for (const [date, st] of rule.perDate) {
+      if (date === iso) return st;
+    }
+  }
+  // windows next
+  if (rule.windows) {
+    for (const [s, e, st] of rule.windows) {
+      if (iso >= s && iso <= e) return st;
+    }
+  }
+  // weekday rules
+  if (rule.availableWeekdays?.includes(dow)) return A;
+  if (rule.tentativeWeekdays?.includes(dow)) return T;
+  return rule.fallback;
 }
 
 /**
- * Applies SEED_RULES against the current member list. For each rule,
- * looks up a member by exact `name`, then dispatches setAvailability for
- * every (date, status) entry. Members not in the rules are untouched;
- * existing rows on those dates get overwritten by the upsert reducer.
+ * Applies SEED_RULES against the current member list.
+ * For each matched member, writes one entry per day in [RANGE_START, RANGE_END]
+ * after first clearing existing availability in that range (via null upserts on
+ * any pre-existing rows in range).
  */
 export function applySeedAvailability(
   members: Member[],
   setAvailability: (memberId: string, date: string, status: Status | null) => void,
+  existingAvailability?: Availability[],
 ): SeedReport {
   const matched: string[] = [];
   const missing: string[] = [];
   let applied = 0;
+
+  const days = eachDay(RANGE_START, RANGE_END);
 
   for (const rule of SEED_RULES) {
     const m = members.find((mm) => mm.name === rule.name);
@@ -118,8 +198,21 @@ export function applySeedAvailability(
       continue;
     }
     matched.push(rule.name);
-    for (const [date, status] of rule.entries) {
-      setAvailability(m.id, date, status);
+
+    // Clear any existing rows in range first (only those that exist, to avoid noise).
+    if (existingAvailability) {
+      for (const av of existingAvailability) {
+        if (av.memberId !== m.id) continue;
+        if (av.date >= RANGE_START && av.date <= RANGE_END) {
+          setAvailability(m.id, av.date, null);
+        }
+      }
+    }
+
+    for (const d of days) {
+      const iso = toISO(d);
+      const st = statusForDate(rule, d);
+      setAvailability(m.id, iso, st);
       applied++;
     }
   }

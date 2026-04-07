@@ -31,10 +31,10 @@ export default function RehearsalPage({
   const [saveOpen, setSaveOpen] = React.useState(false);
   const [date, setDate] = React.useState(() => toLocalDateString(new Date()));
 
-  // Recompute attendance when the user picks a new date: include all members
-  // whose availability for that date is NOT 'unavailable' (so 'available',
-  // 'tentative', or unspecified all count). This trampes manual edits — that's
-  // intentional, the date picker is the "reset to suggestion" button.
+  // Recompute attendance when the user picks a new date: only include members
+  // whose status is 'available' or unspecified. 'tentative' and 'unavailable'
+  // are both excluded. Trampes manual edits intentionally — the date picker
+  // doubles as a "reset to suggestion" button.
   const handleDateChange = (next: string) => {
     setDate(next);
     const suggested = new Set<string>();
@@ -42,7 +42,9 @@ export default function RehearsalPage({
       const av = state.availability.find(
         (a) => a.memberId === m.id && a.date === next,
       );
-      if (av?.status !== 'unavailable') suggested.add(m.id);
+      if (av?.status !== 'unavailable' && av?.status !== 'tentative') {
+        suggested.add(m.id);
+      }
     }
     onAttendingChange(suggested);
   };

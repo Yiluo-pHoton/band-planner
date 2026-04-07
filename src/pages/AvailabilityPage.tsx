@@ -7,13 +7,14 @@ import { cn, toLocalDateString } from '@/lib/utils';
 import { applySeedAvailability } from '@/lib/seedAvailability';
 import type { Availability } from '@/types';
 
-type Brush = 'unavailable' | 'tentative' | 'clear';
+type Brush = 'available' | 'unavailable' | 'tentative' | 'clear';
 type CellStatus = Availability['status'] | null;
 
 const WEEKS = 6;
 const DAYS = WEEKS * 7;
 
 const BRUSHES: { key: Brush; label: string; swatch: string }[] = [
+  { key: 'available', label: '能来', swatch: 'bg-emerald-400' },
   { key: 'unavailable', label: '来不了', swatch: 'bg-red-500' },
   { key: 'tentative', label: '不稳定', swatch: 'bg-amber-400' },
   { key: 'clear', label: '清除', swatch: 'bg-white border border-zinc-300' },
@@ -82,7 +83,37 @@ export default function AvailabilityPage() {
   };
 
   const today = toLocalDateString(new Date());
-  const members = state.members;
+
+  // The Saturday of the real current week (containing today).
+  const thisSaturday = React.useMemo(() => {
+    const s = startOfWeek(new Date()); // Monday
+    return toLocalDateString(addDays(s, 5));
+  }, []);
+
+  // Sort members by this-Saturday status: available/blank (0) → tentative (1) → unavailable (2).
+  const members = React.useMemo(() => {
+    const rank = (memberId: string): number => {
+      const st = lookup.get(`${memberId}|${thisSaturday}`);
+      if (st === 'unavailable') return 2;
+      if (st === 'tentative') return 1;
+      return 0; // 'available' or null
+    };
+    return [...state.members].sort((a, b) => rank(a.id) - rank(b.id));
+  }, [state.members, lookup, thisSaturday]);
+
+  // Date columns where every member is non-unavailable → "everyone can come".
+  const everyoneDates = React.useMemo(() => {
+    const out = new Set<string>();
+    if (state.members.length === 0) return out;
+    for (const d of dates) {
+      const ds = toLocalDateString(d);
+      const ok = state.members.every(
+        (m) => lookup.get(`${m.id}|${ds}`) !== 'unavailable',
+      );
+      if (ok) out.add(ds);
+    }
+    return out;
+  }, [dates, state.members, lookup]);
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
@@ -164,6 +195,7 @@ export default function AvailabilityPage() {
                       const ds = toLocalDateString(d);
                       const isToday = ds === today;
                       const isMonday = i % 7 === 0;
+                      const isEveryone = everyoneDates.has(ds);
                       const dayLabel = ['一', '二', '三', '四', '五', '六', '日'][
                         (d.getDay() + 6) % 7
                       ];
@@ -173,8 +205,10 @@ export default function AvailabilityPage() {
                           className={cn(
                             'px-1 py-1 text-center font-normal border-b border-zinc-200',
                             isMonday && 'border-l border-zinc-200',
-                            isToday && 'bg-zinc-100',
+                            isEveryone && 'bg-emerald-100',
+                            isToday && !isEveryone && 'bg-zinc-100',
                           )}
+                          title={isEveryone ? '所有人都能来' : undefined}
                         >
                           <div className="text-[10px] text-zinc-400">{dayLabel}</div>
                           <div className={cn('text-[11px]', isToday ? 'font-semibold text-zinc-900' : 'text-zinc-600')}>
@@ -196,12 +230,14 @@ export default function AvailabilityPage() {
                         const status = cellStatus(m.id, ds);
                         const isMonday = i % 7 === 0;
                         const isToday = ds === today;
+                        const isEveryone = everyoneDates.has(ds);
                         return (
                           <td
                             key={ds}
                             className={cn(
                               'p-0 border-b border-zinc-100',
                               isMonday && 'border-l border-zinc-200',
+                              isEveryone && 'bg-emerald-50',
                             )}
                           >
                             <button
@@ -243,10 +279,10 @@ export default function AvailabilityPage() {
         open={seedConfirmOpen}
         onOpenChange={setSeedConfirmOpen}
         title="导入示例 availability 数据？"
-        description="按成员名字匹配，把 4/11–9/26 的周六出勤情况批量写入。已有数据会被覆盖。"
+        description="按成员名字匹配，把 4/11–9/26 每一天的能/不能/不稳定按文档批量写入。该范围内已有数据会被覆盖。"
         confirmLabel="导入"
         onConfirm={() => {
-          const r = applySeedAvailability(state.members, setAvailability);
+          const r = applySeedAvailability(state.members, setAvailability, state.availability);
           const parts = [
             `已写入 ${r.applied} 条`,
             `匹配到 ${r.matchedNames.length} 个成员`,
