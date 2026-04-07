@@ -1,8 +1,10 @@
 import * as React from 'react';
-import { CalendarX, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarX, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
 import { cn, toLocalDateString } from '@/lib/utils';
+import { applySeedAvailability } from '@/lib/seedAvailability';
 import type { Availability } from '@/types';
 
 type Brush = 'unavailable' | 'tentative' | 'clear';
@@ -38,6 +40,8 @@ export default function AvailabilityPage() {
   const [brush, setBrush] = React.useState<Brush>('unavailable');
   const [weekOffset, setWeekOffset] = React.useState(0);
   const [painting, setPainting] = React.useState(false);
+  const [seedConfirmOpen, setSeedConfirmOpen] = React.useState(false);
+  const [seedReport, setSeedReport] = React.useState<string | null>(null);
 
   // End paint on global mouseup so dragging out of the grid still ends cleanly.
   React.useEffect(() => {
@@ -90,7 +94,16 @@ export default function AvailabilityPage() {
               拖动单元格标记每个成员的不可用时间。空白 = 默认可用。
             </p>
           </div>
+          <Button variant="secondary" onClick={() => setSeedConfirmOpen(true)}>
+            <Download className="mr-1 h-4 w-4" />
+            导入示例数据
+          </Button>
         </div>
+        {seedReport && (
+          <div className="mt-3 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700">
+            {seedReport}
+          </div>
+        )}
 
         {members.length === 0 ? (
           <div className="mt-6 rounded-lg border border-dashed border-zinc-200 bg-white py-16 text-center">
@@ -225,6 +238,25 @@ export default function AvailabilityPage() {
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={seedConfirmOpen}
+        onOpenChange={setSeedConfirmOpen}
+        title="导入示例 availability 数据？"
+        description="按成员名字匹配，把 4/11–9/26 的周六出勤情况批量写入。已有数据会被覆盖。"
+        confirmLabel="导入"
+        onConfirm={() => {
+          const r = applySeedAvailability(state.members, setAvailability);
+          const parts = [
+            `已写入 ${r.applied} 条`,
+            `匹配到 ${r.matchedNames.length} 个成员`,
+          ];
+          if (r.missingNames.length > 0) {
+            parts.push(`未匹配：${r.missingNames.join('、')}`);
+          }
+          setSeedReport(parts.join(' · '));
+        }}
+      />
     </div>
   );
 }
