@@ -198,9 +198,12 @@ export default function SongDetailPage({ songId, onBack }: SongDetailPageProps) 
           songId={song.id}
           part={assignDialog.part}
           initial={assignDialog.initial}
-          onSubmit={(a) => {
-            if (assignDialog.initial) updateAssignment(a);
-            else addAssignment(a);
+          onSubmit={(list) => {
+            if (assignDialog.initial) {
+              if (list[0]) updateAssignment(list[0]);
+            } else {
+              for (const a of list) addAssignment(a);
+            }
           }}
         />
       )}

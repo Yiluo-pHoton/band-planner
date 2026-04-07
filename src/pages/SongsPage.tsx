@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Music, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Music, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SongFormDialog } from '@/components/SongFormDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -7,7 +7,24 @@ import { useApp } from '@/store/AppContext';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
 import { SONG_STATUSES, SONG_STATUS_META } from '@/lib/songStatus';
 import { cn } from '@/lib/utils';
-import type { Song } from '@/types';
+import type { Assignment, Song } from '@/types';
+
+// A song is "fully assigned" iff every required part has at least one
+// non-emergency assignment (matching count for duplicates). Shelved songs
+// are not flagged — we don't nag about songs the band has set aside.
+function unassignedCount(song: Song, assignments: Assignment[]): number {
+  if (song.status === 'shelved') return 0;
+  let missing = 0;
+  for (const inst of INSTRUMENTS) {
+    const required = song.requiredParts.filter((p) => p === inst).length;
+    if (required === 0) continue;
+    const regular = assignments.filter(
+      (a) => a.songId === song.id && a.part === inst && !a.isEmergency,
+    ).length;
+    if (regular < required) missing += required - regular;
+  }
+  return missing;
+}
 
 interface SongsPageProps {
   onSelect?: (id: string) => void;
@@ -92,17 +109,32 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
                   {songs.map((song) => (
                     <tr key={song.id} className="group text-sm hover:bg-zinc-50">
                       <td className="px-4 py-3 font-medium text-zinc-900">
-                        {onSelect ? (
-                          <button
-                            type="button"
-                            onClick={() => onSelect(song.id)}
-                            className="text-left hover:underline"
-                          >
-                            {song.title}
-                          </button>
-                        ) : (
-                          song.title
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          {onSelect ? (
+                            <button
+                              type="button"
+                              onClick={() => onSelect(song.id)}
+                              className="text-left hover:underline"
+                            >
+                              {song.title}
+                            </button>
+                          ) : (
+                            <span>{song.title}</span>
+                          )}
+                          {(() => {
+                            const missing = unassignedCount(song, state.assignments);
+                            if (missing === 0) return null;
+                            return (
+                              <span
+                                className="inline-flex items-center gap-0.5 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                                title={`还有 ${missing} 个 part 没有正式分配`}
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                缺 {missing}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-zinc-500">{song.artist || '—'}</td>
                       <td className="px-4 py-3">
