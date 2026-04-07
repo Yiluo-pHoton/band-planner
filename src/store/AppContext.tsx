@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { Assignment, Member, PersistedState, Song } from '@/types';
+import type { Assignment, Member, PersistedState, Rehearsal, Song } from '@/types';
 import { loadState, saveState } from '@/store/persist';
 
 // Action types are union-typed so the reducer is exhaustive.
@@ -13,7 +13,10 @@ type Action =
   | { type: 'members/delete'; id: string }
   | { type: 'assignments/add'; assignment: Assignment }
   | { type: 'assignments/update'; assignment: Assignment }
-  | { type: 'assignments/delete'; id: string };
+  | { type: 'assignments/delete'; id: string }
+  | { type: 'rehearsals/add'; rehearsal: Rehearsal }
+  | { type: 'rehearsals/update'; rehearsal: Rehearsal }
+  | { type: 'rehearsals/delete'; id: string };
 
 function reducer(state: PersistedState, action: Action): PersistedState {
   switch (action.type) {
@@ -85,6 +88,23 @@ function reducer(state: PersistedState, action: Action): PersistedState {
         assignments: state.assignments.filter((a) => a.id !== action.id),
       };
 
+    case 'rehearsals/add':
+      return { ...state, rehearsals: [...state.rehearsals, action.rehearsal] };
+
+    case 'rehearsals/update':
+      return {
+        ...state,
+        rehearsals: state.rehearsals.map((r) =>
+          r.id === action.rehearsal.id ? action.rehearsal : r,
+        ),
+      };
+
+    case 'rehearsals/delete':
+      return {
+        ...state,
+        rehearsals: state.rehearsals.filter((r) => r.id !== action.id),
+      };
+
     default: {
       const _exhaustive: never = action;
       return _exhaustive;
@@ -103,6 +123,9 @@ interface AppContextValue {
   addAssignment: (assignment: Assignment) => void;
   updateAssignment: (assignment: Assignment) => void;
   deleteAssignment: (id: string) => void;
+  addRehearsal: (rehearsal: Rehearsal) => void;
+  updateRehearsal: (rehearsal: Rehearsal) => void;
+  deleteRehearsal: (id: string) => void;
 }
 
 const AppContext = React.createContext<AppContextValue | null>(null);
@@ -127,6 +150,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addAssignment: (assignment) => dispatch({ type: 'assignments/add', assignment }),
       updateAssignment: (assignment) => dispatch({ type: 'assignments/update', assignment }),
       deleteAssignment: (id) => dispatch({ type: 'assignments/delete', id }),
+      addRehearsal: (rehearsal) => dispatch({ type: 'rehearsals/add', rehearsal }),
+      updateRehearsal: (rehearsal) => dispatch({ type: 'rehearsals/update', rehearsal }),
+      deleteRehearsal: (id) => dispatch({ type: 'rehearsals/delete', id }),
     }),
     [state],
   );

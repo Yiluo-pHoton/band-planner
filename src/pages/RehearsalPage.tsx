@@ -1,6 +1,8 @@
 import * as React from 'react';
-import { CheckCircle2, HelpCircle, Zap } from 'lucide-react';
+import { CheckCircle2, HelpCircle, Save, Zap } from 'lucide-react';
 import { AttendanceBar } from '@/components/AttendanceBar';
+import { Button } from '@/components/ui/button';
+import { SaveRehearsalDialog } from '@/components/SaveRehearsalDialog';
 import { useApp } from '@/store/AppContext';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
 import { SONG_STATUS_META } from '@/lib/songStatus';
@@ -24,19 +26,38 @@ export default function RehearsalPage({
   onAttendingChange,
   onSelectSong,
 }: RehearsalPageProps) {
-  const { state } = useApp();
+  const { state, addRehearsal } = useApp();
+  const [saveOpen, setSaveOpen] = React.useState(false);
 
   const plan: RehearsalPlan = React.useMemo(
     () => planRehearsal(state.songs, state.assignments, attendingIds),
     [state.songs, state.assignments, attendingIds],
   );
 
+  const selectedSongIds = React.useMemo(
+    () => [...plan.A, ...plan.B].map((s) => s.id),
+    [plan],
+  );
+
+  const canSave = attendingIds.size > 0 && selectedSongIds.length > 0;
+
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
       <div className="mx-auto max-w-6xl p-6">
-        <div>
-          <h1 className="text-2xl font-semibold">排练规划</h1>
-          <p className="text-sm text-zinc-500 mt-1">勾选今天到场的人，看哪些歌能排</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold">排练规划</h1>
+            <p className="text-sm text-zinc-500 mt-1">勾选今天到场的人，看哪些歌能排</p>
+          </div>
+          <Button
+            type="button"
+            variant="default"
+            disabled={!canSave}
+            onClick={() => setSaveOpen(true)}
+          >
+            <Save className="mr-1 h-4 w-4" />
+            保存今天的排练
+          </Button>
         </div>
 
         <div className="mt-6">
@@ -81,6 +102,15 @@ export default function RehearsalPage({
           )}
         </div>
       </div>
+
+      <SaveRehearsalDialog
+        open={saveOpen}
+        onOpenChange={setSaveOpen}
+        attendingMemberIds={[...attendingIds]}
+        selectedSongIds={selectedSongIds}
+        attendeeCount={attendingIds.size}
+        onSubmit={(rehearsal) => addRehearsal(rehearsal)}
+      />
     </div>
   );
 }

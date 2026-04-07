@@ -37,8 +37,11 @@ export interface Assignment {
 
 export interface Rehearsal {
   id: string;
-  date: string;
+  date: string;                  // YYYY-MM-DD wall-clock
+  attendingMemberIds: string[];  // snapshot
+  selectedSongIds: string[];     // snapshot (A+B buckets at save time)
   notes?: string;
+  createdAt: string;             // ISO 8601
 }
 
 export interface Availability {

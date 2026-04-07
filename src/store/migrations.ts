@@ -13,6 +13,20 @@ export const migrations: Migration[] = [
     rehearsals: data?.rehearsals ?? [],
     availability: data?.availability ?? [],
   }),
+  // index 1: v1 -> v2. Rehearsal gained attendingMemberIds, selectedSongIds, createdAt.
+  // Any pre-existing rehearsal rows (none should exist in the wild yet) get safe defaults.
+  (data) => ({
+    ...data,
+    schemaVersion: 2,
+    rehearsals: (data?.rehearsals ?? []).map((r: any) => ({
+      id: r.id,
+      date: r.date,
+      attendingMemberIds: r.attendingMemberIds ?? [],
+      selectedSongIds: r.selectedSongIds ?? [],
+      notes: r.notes,
+      createdAt: r.createdAt ?? new Date().toISOString(),
+    })),
+  }),
 ];
 
 export function migrate(raw: any): PersistedState {
