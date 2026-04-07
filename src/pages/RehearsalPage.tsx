@@ -12,7 +12,8 @@ import {
   type Bucket,
   type RehearsalPlan,
 } from '@/lib/rehearsalPlanner';
-import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+import { cn, toLocalDateString } from '@/lib/utils';
 import type { Song } from '@/types';
 
 interface RehearsalPageProps {
@@ -28,6 +29,23 @@ export default function RehearsalPage({
 }: RehearsalPageProps) {
   const { state, addRehearsal } = useApp();
   const [saveOpen, setSaveOpen] = React.useState(false);
+  const [date, setDate] = React.useState(() => toLocalDateString(new Date()));
+
+  // Recompute attendance when the user picks a new date: include all members
+  // whose availability for that date is NOT 'unavailable' (so 'available',
+  // 'tentative', or unspecified all count). This trampes manual edits — that's
+  // intentional, the date picker is the "reset to suggestion" button.
+  const handleDateChange = (next: string) => {
+    setDate(next);
+    const suggested = new Set<string>();
+    for (const m of state.members) {
+      const av = state.availability.find(
+        (a) => a.memberId === m.id && a.date === next,
+      );
+      if (av?.status !== 'unavailable') suggested.add(m.id);
+    }
+    onAttendingChange(suggested);
+  };
 
   const plan: RehearsalPlan = React.useMemo(
     () => planRehearsal(state.songs, state.assignments, attendingIds),
@@ -47,17 +65,27 @@ export default function RehearsalPage({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">排练规划</h1>
-            <p className="text-sm text-zinc-500 mt-1">勾选今天到场的人，看哪些歌能排</p>
+            <p className="text-sm text-zinc-500 mt-1">
+              选日期 → 出勤会按 availability 预填，勾上下能排哪些歌
+            </p>
           </div>
-          <Button
-            type="button"
-            variant="default"
-            disabled={!canSave}
-            onClick={() => setSaveOpen(true)}
-          >
-            <Save className="mr-1 h-4 w-4" />
-            保存今天的排练
-          </Button>
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => handleDateChange(e.target.value)}
+              className="w-40"
+            />
+            <Button
+              type="button"
+              variant="default"
+              disabled={!canSave}
+              onClick={() => setSaveOpen(true)}
+            >
+              <Save className="mr-1 h-4 w-4" />
+              保存
+            </Button>
+          </div>
         </div>
 
         <div className="mt-6">
@@ -106,6 +134,7 @@ export default function RehearsalPage({
       <SaveRehearsalDialog
         open={saveOpen}
         onOpenChange={setSaveOpen}
+        defaultDate={date}
         attendingMemberIds={[...attendingIds]}
         selectedSongIds={selectedSongIds}
         attendeeCount={attendingIds.size}

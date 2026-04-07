@@ -16,6 +16,7 @@ import type { Rehearsal } from '@/types';
 interface SaveRehearsalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultDate?: string;         // YYYY-MM-DD; falls back to today
   attendingMemberIds: string[]; // snapshot from current attendance
   selectedSongIds: string[];    // A + B at save time
   attendeeCount: number;        // for the summary line
@@ -25,22 +26,23 @@ interface SaveRehearsalDialogProps {
 export function SaveRehearsalDialog({
   open,
   onOpenChange,
+  defaultDate,
   attendingMemberIds,
   selectedSongIds,
   attendeeCount,
   onSubmit,
 }: SaveRehearsalDialogProps) {
-  const [date, setDate] = React.useState(() => toLocalDateString(new Date()));
+  const [date, setDate] = React.useState(() => defaultDate ?? toLocalDateString(new Date()));
   const [notes, setNotes] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (open) {
-      setDate(toLocalDateString(new Date()));
+      setDate(defaultDate ?? toLocalDateString(new Date()));
       setNotes('');
       setError(null);
     }
-  }, [open]);
+  }, [open, defaultDate]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

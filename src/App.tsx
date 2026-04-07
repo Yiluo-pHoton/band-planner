@@ -6,6 +6,7 @@ import SongDetailPage from '@/pages/SongDetailPage';
 import MembersPage from '@/pages/MembersPage';
 import RehearsalPage from '@/pages/RehearsalPage';
 import RehearsalHistoryPage from '@/pages/RehearsalHistoryPage';
+import AvailabilityPage from '@/pages/AvailabilityPage';
 
 export default function App() {
   const [tab, setTab] = React.useState<TabKey>('songs');
@@ -41,6 +42,7 @@ export default function App() {
             <>
               {tab === 'songs' && <SongsPage onSelect={openSongDetail('songs')} />}
               {tab === 'members' && <MembersPage />}
+              {tab === 'availability' && <AvailabilityPage />}
               {tab === 'rehearsal' && (
                 <RehearsalPage
                   attendingIds={attendingIds}

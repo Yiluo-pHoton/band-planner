@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { Assignment, Member, PersistedState, Rehearsal, Song } from '@/types';
+import type { Assignment, Availability, Member, PersistedState, Rehearsal, Song } from '@/types';
 import { loadState, saveState } from '@/store/persist';
 
 // Action types are union-typed so the reducer is exhaustive.
@@ -16,7 +16,9 @@ type Action =
   | { type: 'assignments/delete'; id: string }
   | { type: 'rehearsals/add'; rehearsal: Rehearsal }
   | { type: 'rehearsals/update'; rehearsal: Rehearsal }
-  | { type: 'rehearsals/delete'; id: string };
+  | { type: 'rehearsals/delete'; id: string }
+  // Upsert: replaces any existing row for (memberId, date). Pass status=null to clear.
+  | { type: 'availability/set'; memberId: string; date: string; status: Availability['status'] | null };
 
 function reducer(state: PersistedState, action: Action): PersistedState {
   switch (action.type) {
@@ -105,6 +107,29 @@ function reducer(state: PersistedState, action: Action): PersistedState {
         rehearsals: state.rehearsals.filter((r) => r.id !== action.id),
       };
 
+    case 'availability/set': {
+      // Drop any existing row for this (memberId, date), then insert if status is non-null.
+      // Honors data-model invariant 6 (no duplicate (memberId, date) rows).
+      const filtered = state.availability.filter(
+        (av) => !(av.memberId === action.memberId && av.date === action.date),
+      );
+      if (action.status === null) {
+        return { ...state, availability: filtered };
+      }
+      return {
+        ...state,
+        availability: [
+          ...filtered,
+          {
+            id: crypto.randomUUID(),
+            memberId: action.memberId,
+            date: action.date,
+            status: action.status,
+          },
+        ],
+      };
+    }
+
     default: {
       const _exhaustive: never = action;
       return _exhaustive;
@@ -126,6 +151,7 @@ interface AppContextValue {
   addRehearsal: (rehearsal: Rehearsal) => void;
   updateRehearsal: (rehearsal: Rehearsal) => void;
   deleteRehearsal: (id: string) => void;
+  setAvailability: (memberId: string, date: string, status: Availability['status'] | null) => void;
 }
 
 const AppContext = React.createContext<AppContextValue | null>(null);
@@ -153,6 +179,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addRehearsal: (rehearsal) => dispatch({ type: 'rehearsals/add', rehearsal }),
       updateRehearsal: (rehearsal) => dispatch({ type: 'rehearsals/update', rehearsal }),
       deleteRehearsal: (id) => dispatch({ type: 'rehearsals/delete', id }),
+      setAvailability: (memberId, date, status) =>
+        dispatch({ type: 'availability/set', memberId, date, status }),
     }),
     [state],
   );
