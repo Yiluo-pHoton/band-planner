@@ -10,6 +10,8 @@ export type Instrument =
 
 export type SongStatus = 'shelved' | 'learning' | 'rehearsing' | 'polishing' | 'ready';
 
+export type Role = 'composer' | 'lyricist' | 'ops' | 'recording';
+
 export interface Song {
   id: string;
   title: string;
@@ -24,6 +26,7 @@ export interface Member {
   id: string;
   name: string;
   instruments: Instrument[];
+  roles?: Role[];           // optional for backward compat with v1 data
   createdAt: string;
 }
 

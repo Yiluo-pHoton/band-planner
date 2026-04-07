@@ -5,8 +5,9 @@ import { MemberFormDialog } from '@/components/MemberFormDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
+import { ROLES, ROLE_META } from '@/lib/roles';
 import { cn } from '@/lib/utils';
-import type { Instrument, Member } from '@/types';
+import type { Instrument, Member, Role } from '@/types';
 
 const DRAG_MIME = 'application/x-band-planner-member';
 
@@ -16,6 +17,7 @@ export default function MembersPage() {
   const [editing, setEditing] = React.useState<Member | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = React.useState<Member | undefined>(undefined);
   const [dragOver, setDragOver] = React.useState<Instrument | null>(null);
+  const [dragOverRole, setDragOverRole] = React.useState<Role | null>(null);
 
   const openCreate = () => {
     setEditing(undefined);
@@ -48,6 +50,22 @@ export default function MembersPage() {
     updateMember({ ...m, instruments: m.instruments.filter((i) => i !== inst) });
   };
 
+  const memberRoles = (m: Member): Role[] => m.roles ?? [];
+
+  const addRoleToMember = (memberId: string, role: Role) => {
+    const m = state.members.find((x) => x.id === memberId);
+    if (!m) return;
+    const cur = memberRoles(m);
+    if (cur.includes(role)) return;
+    updateMember({ ...m, roles: [...cur, role] });
+  };
+
+  const removeRoleFromMember = (memberId: string, role: Role) => {
+    const m = state.members.find((x) => x.id === memberId);
+    if (!m) return;
+    updateMember({ ...m, roles: memberRoles(m).filter((r) => r !== role) });
+  };
+
   const handleDragStart = (e: React.DragEvent, memberId: string) => {
     e.dataTransfer.setData(DRAG_MIME, memberId);
     e.dataTransfer.effectAllowed = 'copy';
@@ -65,6 +83,20 @@ export default function MembersPage() {
     const memberId = e.dataTransfer.getData(DRAG_MIME);
     setDragOver(null);
     if (memberId) addInstrumentToMember(memberId, inst);
+  };
+
+  const handleRoleDragOver = (e: React.DragEvent, role: Role) => {
+    if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (dragOverRole !== role) setDragOverRole(role);
+  };
+
+  const handleRoleDrop = (e: React.DragEvent, role: Role) => {
+    e.preventDefault();
+    const memberId = e.dataTransfer.getData(DRAG_MIME);
+    setDragOverRole(null);
+    if (memberId) addRoleToMember(memberId, role);
   };
 
   const members = state.members;
@@ -143,6 +175,65 @@ export default function MembersPage() {
                   </div>
                 );
               })}
+            </div>
+
+            {/* Role boards */}
+            <div className="mt-6">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                其他职能
+              </p>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                {ROLES.map((role) => {
+                  const meta = ROLE_META[role];
+                  const here = members.filter((m) => memberRoles(m).includes(role));
+                  const isOver = dragOverRole === role;
+                  return (
+                    <div
+                      key={role}
+                      onDragOver={(e) => handleRoleDragOver(e, role)}
+                      onDragLeave={() => setDragOverRole((cur) => (cur === role ? null : cur))}
+                      onDrop={(e) => handleRoleDrop(e, role)}
+                      className={cn(
+                        'rounded-lg border bg-white transition-colors',
+                        isOver ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-200',
+                      )}
+                    >
+                      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              'inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold',
+                              meta.badge,
+                            )}
+                          >
+                            {meta.abbrev}
+                          </span>
+                          <span className="text-sm font-medium text-zinc-900">{meta.label}</span>
+                        </div>
+                        <span className="text-xs text-zinc-400">{here.length}</span>
+                      </div>
+                      <div className="min-h-[80px] p-2">
+                        {here.length === 0 ? (
+                          <p className="px-2 py-4 text-center text-xs text-zinc-400">
+                            拖成员到这里
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {here.map((m) => (
+                              <BoardChip
+                                key={m.id}
+                                member={m}
+                                onRemove={() => removeRoleFromMember(m.id, role)}
+                                onDragStart={(e) => handleDragStart(e, m.id)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Member pool */}
