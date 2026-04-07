@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { SongFormDialog } from '@/components/SongFormDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
-import { INSTRUMENT_META } from '@/lib/instruments';
+import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
 import { SONG_STATUS_META } from '@/lib/songStatus';
 import { cn } from '@/lib/utils';
 import type { Song } from '@/types';
@@ -93,18 +93,23 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {song.requiredParts.map((part, i) => {
-                            const meta = INSTRUMENT_META[part];
+                        <div className="grid grid-cols-6 gap-1">
+                          {INSTRUMENTS.map((inst) => {
+                            const count = song.requiredParts.filter((p) => p === inst).length;
+                            const meta = INSTRUMENT_META[inst];
+                            if (count === 0) {
+                              return <span key={inst} className="h-5" />;
+                            }
                             return (
                               <span
-                                key={`${part}-${i}`}
+                                key={inst}
                                 className={cn(
-                                  'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium',
+                                  'inline-flex items-center justify-center rounded-md border px-1.5 py-0.5 text-xs font-medium',
                                   meta.badge,
                                 )}
                               >
                                 {meta.abbrev}
+                                {count > 1 && <span className="ml-0.5 text-[10px]">×{count}</span>}
                               </span>
                             );
                           })}
