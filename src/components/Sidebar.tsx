@@ -1,7 +1,7 @@
-import { CalendarCheck, CalendarRange, History, Music, Users, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, CalendarRange, History, ListMusic, Music, Users, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type TabKey = 'songs' | 'members' | 'availability' | 'rehearsal' | 'history';
+export type TabKey = 'songs' | 'members' | 'memberSongs' | 'availability' | 'rehearsal' | 'history';
 
 interface NavItem {
   key: TabKey;
@@ -12,6 +12,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { key: 'songs', label: '歌曲', icon: Music },
   { key: 'members', label: '成员', icon: Users },
+  { key: 'memberSongs', label: '成员曲目', icon: ListMusic },
   { key: 'availability', label: 'Availability', icon: CalendarRange },
   { key: 'rehearsal', label: '排练规划', icon: CalendarCheck },
   { key: 'history', label: '排练历史', icon: History },

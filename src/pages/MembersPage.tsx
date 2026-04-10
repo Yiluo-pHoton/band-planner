@@ -11,7 +11,11 @@ import type { Instrument, Member, Role } from '@/types';
 
 const DRAG_MIME = 'application/x-band-planner-member';
 
-export default function MembersPage() {
+interface MembersPageProps {
+  onSelect?: (id: string) => void;
+}
+
+export default function MembersPage({ onSelect }: MembersPageProps = {}) {
   const { state, addMember, updateMember, deleteMember } = useApp();
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Member | undefined>(undefined);
@@ -250,6 +254,7 @@ export default function MembersPage() {
                     <PoolCard
                       key={m.id}
                       member={m}
+                      onSelect={onSelect ? () => onSelect(m.id) : undefined}
                       onEdit={() => openEdit(m)}
                       onDelete={() => setDeleteTarget(m)}
                       onDragStart={(e) => handleDragStart(e, m.id)}
@@ -324,16 +329,18 @@ function BoardChip({ member, onRemove, onDragStart }: BoardChipProps) {
 
 interface PoolCardProps {
   member: Member;
+  onSelect?: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onDragStart: (e: React.DragEvent) => void;
 }
 
-function PoolCard({ member, onEdit, onDelete, onDragStart }: PoolCardProps) {
+function PoolCard({ member, onSelect, onEdit, onDelete, onDragStart }: PoolCardProps) {
   return (
     <div
       draggable
       onDragStart={onDragStart}
+      onClick={onSelect}
       className="group relative flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm hover:border-zinc-300 cursor-grab active:cursor-grabbing"
     >
       <span className="font-medium text-zinc-900">{member.name}</span>
