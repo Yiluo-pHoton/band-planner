@@ -12,18 +12,35 @@ LocalStorage gives you no schema, no foreign keys, no type checks at runtime. A 
 ## Entities (TypeScript interfaces)
 
 These interfaces live in `src/types/index.ts`. This file is the canonical copy. If you change one, change both in the same commit.
-
 ```ts
 export type Instrument = 'vocal' | 'keys' | 'guitar_lead' | 'guitar_rhythm' | 'drums' | 'bass';
 
-export type SongStatus = 'shelved' | 'learning' | 'rehearsing' | 'polishing' | 'ready';
+// 'writing' is original-only (composer/lyricist not both ready yet).
+export type SongStatus = 'writing' | 'shelved' | 'learning' | 'rehearsing' | 'polishing' | 'ready';
+
+export type SongKind = 'cover' | 'original';
+
+export type Role = 'composer' | 'lyricist' | 'ops' | 'recording';
+
+// Per-assignment learning status: how well THIS member knows THIS part of THIS song.
+export type AssignmentStatus = 'want' | 'practicing' | 'mastered';
 
 export interface Song {
   id: string;                  // UUID
   title: string;
   artist?: string;
   status: SongStatus;
-  requiredParts: Instrument[]; // non-empty; duplicates allowed (e.g. ['vocal','vocal'] = double vocal)
+  kind: SongKind;              // 'cover' | 'original'
+  // For 'cover' songs this MUST be non-empty (invariant 2).
+  // For 'original' songs this MAY be empty (instrumentation 待定).
+  requiredParts: Instrument[];
+  composerIds?: string[];      // FK -> Member.id; absent => unknown
+  lyricistIds?: string[];      // FK -> Member.id; absent => unknown
+  // Original-only ready flags. When BOTH true and status==='writing',
+  // SongDetailPage auto-transitions status to 'learning'. Cancelling
+  // a flag does NOT revert status. Absent => false.
+  composerReady?: boolean;
+  lyricistReady?: boolean;
   notes?: string;
   createdAt: string;           // ISO 8601 datetime
 }
@@ -32,6 +49,7 @@ export interface Member {
   id: string;                  // UUID
   name: string;
   instruments: Instrument[];   // what they CAN play
+  roles?: Role[];              // optional, backward-compat with v1 data
   createdAt: string;
 }
 
@@ -39,14 +57,18 @@ export interface Assignment {
   id: string;                  // UUID
   songId: string;              // FK -> Song.id
   memberId: string;            // FK -> Member.id
-  part: Instrument;            // must appear in Song.requiredParts
+  part: Instrument;            // must appear in Song.requiredParts (cover only; originals may have empty requiredParts and no assignments)
   isEmergency: boolean;        // true = backup / "only if nobody else"
+  status?: AssignmentStatus;   // absent => 'want'
 }
 
 export interface Rehearsal {
   id: string;                  // UUID
   date: string;                // YYYY-MM-DD, NO timezone, NO time component
+  attendingMemberIds: string[];// snapshot at save time
+  selectedSongIds: string[];   // snapshot of A+B buckets at save time
   notes?: string;
+  createdAt: string;           // ISO 8601
 }
 
 export interface Availability {
@@ -56,9 +78,6 @@ export interface Availability {
   status: 'available' | 'unavailable' | 'tentative';
 }
 ```
-
-If you need a new entity or field, add it here, bump the schema version, and write a migration (see below).
-
 ## LocalStorage layout
 
 Single key, single JSON blob. Don't scatter data across multiple keys — it makes migrations impossible to do atomically.
@@ -67,7 +86,7 @@ Single key, single JSON blob. Don't scatter data across multiple keys — it mak
 - **Shape:**
   ```ts
   interface PersistedState {
-    schemaVersion: number;     // currently 1
+    schemaVersion: number;     // currently 3
     songs: Song[];
     members: Member[];
     assignments: Assignment[];
@@ -138,8 +157,8 @@ Rules:
 
 These must hold after every reducer action and after every load. If you write code that could violate one, you have a bug.
 
-1. **Referential integrity.** Every `Assignment.songId` resolves to a `Song`, every `Assignment.memberId` resolves to a `Member`, every `Availability.memberId` resolves to a `Member`. **When you delete a Song, cascade-delete its Assignments. When you delete a Member, cascade-delete that member's Assignments and Availability rows.**
-2. **`Song.requiredParts` is non-empty.** A song with no parts is meaningless. The Song form must enforce this; the reducer must reject it.
+1. **Referential integrity.** Every `Assignment.songId` resolves to a `Song`, every `Assignment.memberId` resolves to a `Member`, every `Availability.memberId` resolves to a `Member`. **When you delete a Song, cascade-delete its Assignments. When you delete a Member, cascade-delete that member's Assignments and Availability rows. When you delete a Member, also strip that member's id from every song's `composerIds` and `lyricistIds`.**
+2. **`Song.requiredParts` is non-empty for `kind: 'cover'`.** Originals (`kind: 'original'`) may have an empty `requiredParts` (instrumentation 待定). The Song form must enforce the cover-only check; the reducer must reject empty parts on covers.
 3. **`Assignment.part` must appear in `Song.requiredParts`.** Dropping a part from a song must also delete any assignments that referenced that part.
 4. **`Assignment.part` must be in `Member.instruments`.** If a member is edited to drop an instrument, delete their assignments for that part.
 5. **Dates are wall-clock `YYYY-MM-DD` strings, never `Date` objects, never ISO with timezone.** This is the single most common bug source. Storing `new Date().toISOString()` for a "rehearsal day" makes it shift across midnight UTC for users in negative timezones. Use a helper:
