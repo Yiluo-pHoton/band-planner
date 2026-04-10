@@ -25,12 +25,15 @@ interface SidebarProps {
 
 export function Sidebar({ active, onChange }: SidebarProps) {
   return (
-    <aside className="flex h-screen w-56 flex-col border-r border-zinc-200 bg-white">
-      <div className="px-5 py-5">
-        <p className="text-base font-semibold text-zinc-900">Band Planner</p>
-        <p className="text-xs text-zinc-500 mt-0.5">乐队排练规划</p>
+    <aside className="flex h-screen w-14 flex-col border-r border-zinc-200 bg-white transition-all lg:w-56">
+      {/* Logo area */}
+      <div className="px-3 py-5 lg:px-5">
+        <p className="hidden text-base font-semibold text-zinc-900 lg:block">Band Planner</p>
+        <p className="hidden text-xs text-zinc-500 mt-0.5 lg:block">乐队排练规划</p>
+        {/* Collapsed: just a music icon */}
+        <p className="text-center text-base font-bold text-zinc-900 lg:hidden">♪</p>
       </div>
-      <nav className="flex-1 px-2">
+      <nav className="flex-1 px-1.5 lg:px-2">
         {NAV.map((item) => {
           const Icon = item.icon;
           const isActive = item.key === active;
@@ -39,15 +42,16 @@ export function Sidebar({ active, onChange }: SidebarProps) {
               key={item.key}
               type="button"
               onClick={() => onChange(item.key)}
+              title={item.label}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                'flex w-full items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium transition-colors lg:justify-start lg:px-3',
                 isActive
                   ? 'bg-zinc-100 text-zinc-900'
                   : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900',
               )}
             >
-              <Icon className="h-4 w-4" />
-              {item.label}
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="hidden lg:inline">{item.label}</span>
             </button>
           );
         })}
