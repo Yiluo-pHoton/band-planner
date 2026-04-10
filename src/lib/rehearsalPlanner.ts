@@ -11,6 +11,7 @@ export const STATUS_RANK: Record<SongStatus, number> = {
   polishing: 1,
   rehearsing: 2,
   learning: 3,
+  writing: 4,  // originals still in writing phase — shouldn't appear in planner anyway (filtered below)
   shelved: 99, // never shown, but keep the type total
 };
 
@@ -37,11 +38,17 @@ export function bucketFor(
   let uncoveredSlots = 0;
 
   for (const part of song.requiredParts) {
+    // An assignment with status === 'want' means the member hasn't started
+    // practicing this song yet — they can't actually play it today, so it
+    // doesn't count as coverage.
+    const isUsable = (a: Assignment) => (a.status ?? 'want') !== 'want';
+
     // Prefer a regular (non-emergency) assignment first.
     const reg = songAssignments.find(
       (a) =>
         a.part === part &&
         !a.isEmergency &&
+        isUsable(a) &&
         attendingIds.has(a.memberId) &&
         !usedRegular.has(a.id),
     );
@@ -55,6 +62,7 @@ export function bucketFor(
       (a) =>
         a.part === part &&
         a.isEmergency &&
+        isUsable(a) &&
         attendingIds.has(a.memberId) &&
         !usedEmergency.has(a.id),
     );
@@ -90,6 +98,7 @@ export function planRehearsal(
 
   for (const song of songs) {
     if (song.status === 'shelved') continue; // edge case 5 / shelved rule
+    if (song.status === 'writing') continue;  // original still in writing phase — not rehearsable
     const b = bucketFor(song, assignments, attendingIds);
     if (b === 'A') A.push(song);
     else if (b === 'B') B.push(song);
