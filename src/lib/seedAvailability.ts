@@ -56,15 +56,14 @@ export const SEED_RULES: SeedRule[] = [
   {
     name: 'Ahem',
     fallback: U,
+    // 周五、周六都可以
     availableWeekdays: [FRI, SAT],
-    // 4/18 - 9月 基本全程不在
-    windows: [['2026-04-18', '2026-09-26', U]],
   },
   {
     name: 'Frank',
     fallback: U,
-    // 周六不能, 周三/周五能
-    availableWeekdays: [WED, FRI],
+    // 4月底走前的周三/周五/周六都能来
+    availableWeekdays: [WED, FRI, SAT],
     // 4月底之后离开, 9月回归
     windows: [['2026-05-01', '2026-08-31', U]],
   },
