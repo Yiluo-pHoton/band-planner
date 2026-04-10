@@ -8,16 +8,33 @@ export type Instrument =
   | 'drums'
   | 'bass';
 
-export type SongStatus = 'shelved' | 'learning' | 'rehearsing' | 'polishing' | 'ready';
+// 'writing' is original-only: composer/lyricist not both ready yet.
+export type SongStatus = 'writing' | 'shelved' | 'learning' | 'rehearsing' | 'polishing' | 'ready';
 
 export type Role = 'composer' | 'lyricist' | 'ops' | 'recording';
+
+// Per-assignment learning status: how well THIS member knows THIS part of THIS song.
+// Optional for forward-compat with v1/v2 data; missing => treated as 'want'.
+export type AssignmentStatus = 'want' | 'practicing' | 'mastered';
+
+export type SongKind = 'cover' | 'original';
 
 export interface Song {
   id: string;
   title: string;
   artist?: string;
   status: SongStatus;
+  kind: SongKind;
+  // For 'cover' songs this MUST be non-empty (invariant 2).
+  // For 'original' songs this MAY be empty (instrumentation 待定).
   requiredParts: Instrument[];
+  composerIds?: string[];   // FK -> Member.id; optional, absent => unknown
+  lyricistIds?: string[];   // FK -> Member.id; optional, absent => unknown
+  // Original-only: ready flags. When BOTH true and status==='writing',
+  // SongDetailPage auto-transitions status to 'learning'. Cancelling a flag
+  // does NOT revert status. Absent => false.
+  composerReady?: boolean;
+  lyricistReady?: boolean;
   notes?: string;
   createdAt: string;
 }
@@ -36,6 +53,7 @@ export interface Assignment {
   memberId: string;
   part: Instrument;
   isEmergency: boolean;
+  status?: AssignmentStatus; // optional; absent => 'want'
 }
 
 export interface Rehearsal {

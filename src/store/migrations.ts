@@ -27,6 +27,25 @@ export const migrations: Migration[] = [
       createdAt: r.createdAt ?? new Date().toISOString(),
     })),
   }),
+  // index 2: v2 -> v3. Song gained `kind` ('cover' | 'original'). Existing songs default to 'cover'.
+  (data) => ({
+    ...data,
+    schemaVersion: 3,
+    songs: (data?.songs ?? []).map((s: any) => ({
+      ...s,
+      kind: s.kind ?? 'cover',
+    })),
+  }),
+  // index 3: v3 -> v4. AssignmentStatus collapsed: 'ready' merged into 'practicing'.
+  // The old "可以排" column is gone; anything sitting there moves to "在练".
+  (data) => ({
+    ...data,
+    schemaVersion: 4,
+    assignments: (data?.assignments ?? []).map((a: any) => ({
+      ...a,
+      status: a.status === 'ready' ? 'practicing' : a.status,
+    })),
+  }),
 ];
 
 export function migrate(raw: any): PersistedState {

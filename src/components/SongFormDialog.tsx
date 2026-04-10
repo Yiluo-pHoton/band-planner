@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
 import { SONG_STATUSES, SONG_STATUS_META } from '@/lib/songStatus';
-import type { Instrument, Song, SongStatus } from '@/types';
+import type { Instrument, Song, SongKind, SongStatus } from '@/types';
 
 interface SongFormDialogProps {
   open: boolean;
@@ -26,19 +26,31 @@ interface SongFormDialogProps {
 interface FormState {
   title: string;
   artist: string;
+  kind: SongKind;
   status: SongStatus;
   requiredParts: Instrument[];
   notes: string;
 }
 
 function emptyForm(): FormState {
-  return { title: '', artist: '', status: 'learning', requiredParts: [], notes: '' };
+  return { title: '', artist: '', kind: 'cover', status: 'learning', requiredParts: [], notes: '' };
+}
+
+// When kind switches, snap status to a sensible default if the current value
+// doesn't belong to the new kind's allowed set.
+function statusForKind(kind: SongKind, current: SongStatus): SongStatus {
+  if (kind === 'original') {
+    return current; // originals allow all statuses (including 'writing')
+  }
+  // covers can't be in 'writing'
+  return current === 'writing' ? 'learning' : current;
 }
 
 function fromSong(song: Song): FormState {
   return {
     title: song.title,
     artist: song.artist ?? '',
+    kind: song.kind,
     status: song.status,
     requiredParts: [...song.requiredParts],
     notes: song.notes ?? '',
@@ -76,8 +88,9 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: SongFo
       setError('请填写歌曲标题');
       return;
     }
-    if (form.requiredParts.length === 0) {
-      setError('至少选择一个乐器 part');
+    // Cover songs must have at least one part. Originals may be empty (instrumentation 待定).
+    if (form.kind === 'cover' && form.requiredParts.length === 0) {
+      setError('翻唱曲至少选择一个乐器 part');
       return;
     }
 
@@ -86,6 +99,7 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: SongFo
           ...initial,
           title,
           artist: form.artist.trim() || undefined,
+          kind: form.kind,
           status: form.status,
           requiredParts: form.requiredParts,
           notes: form.notes.trim() || undefined,
@@ -94,6 +108,7 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: SongFo
           id: crypto.randomUUID(),
           title,
           artist: form.artist.trim() || undefined,
+          kind: form.kind,
           status: form.status,
           requiredParts: form.requiredParts,
           notes: form.notes.trim() || undefined,
@@ -139,6 +154,35 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: SongFo
           </div>
 
           <div>
+            <Label className="mb-1 block">类型</Label>
+            <div className="flex gap-1 rounded-md border border-zinc-200 bg-white p-0.5">
+              {(['cover', 'original'] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => {
+                    // When switching to original on a brand-new song, default to 'writing'.
+                    // When switching to cover, snap status away from 'writing'.
+                    const nextStatus =
+                      !initial && k === 'original'
+                        ? 'writing'
+                        : statusForKind(k, form.status);
+                    setForm({ ...form, kind: k, status: nextStatus });
+                  }}
+                  className={cn(
+                    'flex-1 rounded px-2 py-1 text-xs font-medium transition-colors',
+                    form.kind === k
+                      ? 'bg-zinc-900 text-white'
+                      : 'text-zinc-500 hover:text-zinc-900',
+                  )}
+                >
+                  {k === 'cover' ? '翻唱' : '原创'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <Label htmlFor="status" className="mb-1 block">
               状态
             </Label>
@@ -148,7 +192,7 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: SongFo
               onChange={(e) => setForm({ ...form, status: e.target.value as SongStatus })}
               className="flex h-9 w-full rounded-md border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1"
             >
-              {SONG_STATUSES.map((s) => (
+              {SONG_STATUSES.filter((s) => form.kind === 'original' || s !== 'writing').map((s) => (
                 <option key={s} value={s}>
                   {SONG_STATUS_META[s].label}
                 </option>
@@ -158,7 +202,12 @@ export function SongFormDialog({ open, onOpenChange, initial, onSubmit }: SongFo
 
           <div>
             <Label className="mb-1 block">
-              需要的 part <span className="text-red-600">*</span>
+              需要的 part
+              {form.kind === 'cover' ? (
+                <span className="text-red-600"> *</span>
+              ) : (
+                <span className="ml-1 text-xs text-zinc-400">（原创可留空 → 配器待定）</span>
+              )}
             </Label>
             <div className="grid grid-cols-2 gap-2">
               {INSTRUMENTS.map((inst) => {

@@ -65,12 +65,22 @@ function reducer(state: PersistedState, action: Action): PersistedState {
     }
 
     case 'members/delete':
-      // Cascade: drop assignments and availability for this member.
+      // Cascade: drop assignments + availability + composer/lyricist refs for this member.
       return {
         ...state,
         members: state.members.filter((m) => m.id !== action.id),
         assignments: state.assignments.filter((a) => a.memberId !== action.id),
         availability: state.availability.filter((av) => av.memberId !== action.id),
+        songs: state.songs.map((s) => {
+          const hasC = s.composerIds?.includes(action.id);
+          const hasL = s.lyricistIds?.includes(action.id);
+          if (!hasC && !hasL) return s;
+          return {
+            ...s,
+            composerIds: hasC ? s.composerIds!.filter((id) => id !== action.id) : s.composerIds,
+            lyricistIds: hasL ? s.lyricistIds!.filter((id) => id !== action.id) : s.lyricistIds,
+          };
+        }),
       };
 
     case 'assignments/add':

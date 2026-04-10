@@ -1,15 +1,17 @@
 import type { SongStatus } from '@/types';
 
 export const SONG_STATUS_META: Record<SongStatus, { label: string; badge: string }> = {
-  ready: { label: '已就绪', badge: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  polishing: { label: '打磨中', badge: 'bg-blue-100 text-blue-800 border-blue-200' },
-  rehearsing: { label: '排练中', badge: 'bg-amber-100 text-amber-800 border-amber-200' },
-  learning: { label: '学习中', badge: 'bg-zinc-100 text-zinc-700 border-zinc-200' },
-  shelved: { label: '暂搁置', badge: 'bg-zinc-100 text-zinc-500 border-zinc-200' },
+  writing: { label: '在写', badge: 'bg-violet-600 text-white border-violet-600' },
+  ready: { label: '已就绪', badge: 'bg-emerald-600 text-white border-emerald-600' },
+  polishing: { label: '在打磨', badge: 'bg-indigo-600 text-white border-indigo-600' },
+  rehearsing: { label: '能合了', badge: 'bg-sky-600 text-white border-sky-600' },
+  learning: { label: '还在练', badge: 'bg-zinc-700 text-white border-zinc-700' },
+  shelved: { label: '搁置了', badge: 'bg-zinc-200 text-zinc-500 border-zinc-300 line-through' },
 };
 
 // Display order in selects (priority high to low, with shelved at the end)
 export const SONG_STATUSES: SongStatus[] = [
+  'writing',
   'learning',
   'rehearsing',
   'polishing',
