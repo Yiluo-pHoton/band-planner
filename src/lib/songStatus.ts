@@ -18,3 +18,23 @@ export const SONG_STATUSES: SongStatus[] = [
   'ready',
   'shelved',
 ];
+
+// Progression order (shelved is special — always allowed as a sideways move)
+const PROGRESSION: SongStatus[] = ['writing', 'learning', 'rehearsing', 'polishing', 'ready'];
+
+/**
+ * Cap the maximum allowed status based on how many parts are still unassigned:
+ *   missing ≥ 2  →  max = learning (还在练)
+ *   missing = 1  →  max = rehearsing (能合了)
+ *   missing = 0  →  no cap
+ * Shelved is always allowed (sideways move).
+ */
+export function isStatusAllowed(target: SongStatus, missingParts: number): boolean {
+  if (target === 'shelved') return true;
+  if (missingParts <= 0) return true;
+  const idx = PROGRESSION.indexOf(target);
+  const cap = missingParts >= 2
+    ? PROGRESSION.indexOf('learning')    // 还在练
+    : PROGRESSION.indexOf('rehearsing'); // 能合了
+  return idx <= cap;
+}

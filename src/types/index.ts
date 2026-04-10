@@ -69,8 +69,10 @@ export interface Availability {
   id: string;
   memberId: string;
   date: string;
-  status: 'available' | 'unavailable' | 'tentative';
+  status: AvailabilityStatus;
 }
+
+export type AvailabilityStatus = 'available' | 'unavailable' | 'tentative';
 
 export interface PersistedState {
   schemaVersion: number;

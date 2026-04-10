@@ -10,32 +10,32 @@ export interface InstrumentMeta {
 
 export const INSTRUMENT_META: Record<Instrument, InstrumentMeta> = {
   vocal: {
-    abbrev: '主唱',
+    abbrev: 'Vo',
     label: '主唱',
     badge: 'bg-purple-100 text-purple-800 border-purple-200',
   },
   keys: {
-    abbrev: '键盘',
+    abbrev: 'Key',
     label: '键盘',
     badge: 'bg-teal-100 text-teal-800 border-teal-200',
   },
   guitar_lead: {
-    abbrev: '主音',
-    label: '主音',
+    abbrev: 'Gt₁',
+    label: '主音吉他',
     badge: 'bg-rose-100 text-rose-800 border-rose-200',
   },
   guitar_rhythm: {
-    abbrev: '节奏',
-    label: '节奏',
+    abbrev: 'Gt₂',
+    label: '节奏吉他',
     badge: 'bg-amber-100 text-amber-800 border-amber-200',
   },
   drums: {
-    abbrev: '鼓手',
-    label: '鼓手',
+    abbrev: 'Dr',
+    label: '鼓',
     badge: 'bg-orange-100 text-orange-800 border-orange-200',
   },
   bass: {
-    abbrev: '贝斯',
+    abbrev: 'Ba',
     label: '贝斯',
     badge: 'bg-blue-100 text-blue-800 border-blue-200',
   },
