@@ -5,7 +5,7 @@ import { SongFormDialog } from '@/components/SongFormDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
 import { INSTRUMENT_META, INSTRUMENTS } from '@/lib/instruments';
-import { SONG_STATUS_META, SONG_STATUSES } from '@/lib/songStatus';
+import { SONG_STATUS_META, SONG_STATUSES, isStatusAllowed } from '@/lib/songStatus';
 import type { SongStatus } from '@/types';
 import { cn } from '@/lib/utils';
 import type { Assignment, Instrument, Member, Song } from '@/types';
@@ -48,6 +48,16 @@ export default function SongDetailPage({ songId, onBack }: SongDetailPageProps) 
   }, [song, updateSong]);
 
   if (!song) return null;
+
+  // How many required parts are still unassigned (no regular assignment)?
+  const missingParts = INSTRUMENTS.reduce((sum, inst) => {
+    const required = song.requiredParts.filter((p) => p === inst).length;
+    if (required === 0) return sum;
+    const regular = state.assignments.filter(
+      (a) => a.songId === song.id && a.part === inst && !a.isEmergency,
+    ).length;
+    return sum + Math.max(0, required - regular);
+  }, 0);
 
   // Group requiredParts by part type, with the count = how many of that part this song needs.
   const partCounts = INSTRUMENTS.reduce<Partial<Record<Instrument, number>>>((acc, inst) => {
@@ -133,8 +143,8 @@ export default function SongDetailPage({ songId, onBack }: SongDetailPageProps) 
                     )}
                   >
                     {SONG_STATUSES.filter((s) => song.kind === 'original' || s !== 'writing').map((s) => (
-                      <option key={s} value={s}>
-                        {SONG_STATUS_META[s].label}
+                      <option key={s} value={s} disabled={!isStatusAllowed(s, missingParts)}>
+                        {SONG_STATUS_META[s].label}{!isStatusAllowed(s, missingParts) ? '（缺人）' : ''}
                       </option>
                     ))}
                   </select>

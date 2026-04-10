@@ -1,13 +1,13 @@
 import * as React from 'react';
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, LayoutGrid, List, Music, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Columns3, List, Music, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SongFormDialog } from '@/components/SongFormDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
-import { SONG_STATUSES, SONG_STATUS_META } from '@/lib/songStatus';
+import { SONG_STATUSES, SONG_STATUS_META, isStatusAllowed } from '@/lib/songStatus';
 import { cn } from '@/lib/utils';
-import type { Assignment, Song } from '@/types';
+import type { Assignment, Song, SongStatus } from '@/types';
 
 // A song is "fully assigned" iff every required part has at least one
 // non-emergency assignment (matching count for duplicates). Shelved songs
@@ -40,7 +40,14 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
   const [editing, setEditing] = React.useState<Song | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = React.useState<Song | undefined>(undefined);
   const [sort, setSort] = React.useState<{ key: SortKey; dir: SortDir } | null>(null);
-  const [view, setView] = React.useState<ViewMode>('table');
+  const [view, setViewRaw] = React.useState<ViewMode>(() => {
+    const saved = localStorage.getItem('band-planner:songs-view');
+    return saved === 'cards' ? 'cards' : 'table';
+  });
+  const setView = (v: ViewMode) => {
+    setViewRaw(v);
+    localStorage.setItem('band-planner:songs-view', v);
+  };
 
   const cycleSort = (key: SortKey) => {
     setSort((cur) => {
@@ -83,7 +90,7 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
-      <div className="mx-auto max-w-5xl p-6">
+      <div className={cn('mx-auto p-6', view === 'cards' ? 'max-w-7xl' : 'max-w-5xl')}>
         <div className="flex items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">歌曲</h1>
@@ -109,13 +116,13 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
               <button
                 type="button"
                 onClick={() => setView('cards')}
-                title="卡片视图"
+                title="看板视图"
                 className={cn(
                   'flex h-7 w-7 items-center justify-center rounded transition-colors',
                   view === 'cards' ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-900',
                 )}
               >
-                <LayoutGrid className="h-4 w-4" />
+                <Columns3 className="h-4 w-4" />
               </button>
             </div>
             <Button onClick={openCreate}>
@@ -128,7 +135,16 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
         <div className="mt-6">
           {songs.length === 0 ? (
             <EmptyState onAdd={openCreate} />
-          ) : view === 'table' ? (
+          ) : view === 'cards' ? (
+            <KanbanBoard
+              songs={state.songs}
+              assignments={state.assignments}
+              onSelect={onSelect}
+              onEdit={openEdit}
+              onDelete={setDeleteTarget}
+              onStatusChange={(song, status) => updateSong({ ...song, status })}
+            />
+          ) : (
             <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
               <table className="w-full">
                 <thead className="bg-zinc-50/60">
@@ -203,22 +219,6 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
                   })}
                 </tbody>
               </table>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {songs.map((song) => {
-                const missing = unassignedCount(song, state.assignments);
-                return (
-                  <SongCard
-                    key={song.id}
-                    song={song}
-                    missing={missing}
-                    onSelect={onSelect ? () => onSelect(song.id) : undefined}
-                    onEdit={() => openEdit(song)}
-                    onDelete={() => setDeleteTarget(song)}
-                  />
-                );
-              })}
             </div>
           )}
         </div>
@@ -303,7 +303,114 @@ function PartsRow({ song }: { song: Song }) {
   );
 }
 
-interface SongCardProps {
+/* ---- Kanban board grouped by status ---- */
+
+const STATUS_TINT: Record<string, string> = {
+  writing: 'bg-violet-50/60',
+  learning: 'bg-zinc-50/60',
+  rehearsing: 'bg-sky-50/60',
+  polishing: 'bg-indigo-50/60',
+  ready: 'bg-emerald-50/60',
+  shelved: 'bg-zinc-100/40',
+};
+
+const MIME = 'application/x-band-song-id';
+
+interface KanbanBoardProps {
+  songs: Song[];
+  assignments: Assignment[];
+  onSelect?: (id: string) => void;
+  onEdit: (song: Song) => void;
+  onDelete: (song: Song) => void;
+  onStatusChange: (song: Song, status: SongStatus) => void;
+}
+
+function KanbanBoard({ songs, assignments, onSelect, onEdit, onDelete, onStatusChange }: KanbanBoardProps) {
+  const [dragOver, setDragOver] = React.useState<SongStatus | null>(null);
+
+  const columns = SONG_STATUSES.map((status) => ({
+    status,
+    meta: SONG_STATUS_META[status],
+    songs: songs.filter((s) => s.status === status),
+  }));
+
+  const visibleColumns = columns.filter((c) => c.songs.length > 0 || c.status !== 'shelved');
+
+  const handleDrop = (targetStatus: SongStatus, e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(null);
+    const songId = e.dataTransfer.getData(MIME);
+    if (!songId) return;
+    const song = songs.find((s) => s.id === songId);
+    if (song && song.status !== targetStatus) {
+      // Don't allow dragging covers into 'writing' or writing-locked originals out of 'writing'
+      if (targetStatus === 'writing' && song.kind !== 'original') return;
+      if (song.status === 'writing' && song.kind === 'original' && !(song.composerReady && song.lyricistReady)) return;
+      // Songs with unassigned parts can't progress beyond 'learning'
+      const missing = unassignedCount(song, assignments);
+      if (!isStatusAllowed(targetStatus, missing)) return;
+      onStatusChange(song, targetStatus);
+    }
+  };
+
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-2">
+      {visibleColumns.map((col) => (
+        <div
+          key={col.status}
+          className={cn(
+            'flex w-56 shrink-0 flex-col rounded-xl border bg-white shadow-sm transition-colors',
+            dragOver === col.status ? 'border-zinc-400 ring-2 ring-zinc-200' : 'border-zinc-200',
+          )}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(col.status);
+          }}
+          onDragLeave={() => setDragOver(null)}
+          onDrop={(e) => handleDrop(col.status, e)}
+        >
+          <div className={cn('flex items-center justify-between rounded-t-xl border-b px-3 py-2', STATUS_TINT[col.status])}>
+            <div className="flex items-center gap-1.5">
+              <span
+                className={cn(
+                  'inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium',
+                  col.meta.badge,
+                )}
+              >
+                {col.meta.label}
+              </span>
+            </div>
+            <span className="text-[10px] font-medium text-zinc-400">{col.songs.length}</span>
+          </div>
+
+          <div className={cn('flex-1 space-y-1.5 p-2', col.songs.length === 0 && 'min-h-[4rem]')}>
+            {col.songs.length === 0 ? (
+              <p className="py-4 text-center text-[10px] text-zinc-300">
+                {dragOver === col.status ? '放到这里' : '暂无'}
+              </p>
+            ) : (
+              col.songs.map((song) => {
+                const missing = unassignedCount(song, assignments);
+                return (
+                  <KanbanCard
+                    key={song.id}
+                    song={song}
+                    missing={missing}
+                    onSelect={onSelect ? () => onSelect(song.id) : undefined}
+                    onEdit={() => onEdit(song)}
+                    onDelete={() => onDelete(song)}
+                  />
+                );
+              })
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface KanbanCardProps {
   song: Song;
   missing: number;
   onSelect?: () => void;
@@ -311,58 +418,64 @@ interface SongCardProps {
   onDelete: () => void;
 }
 
-function SongCard({ song, missing, onSelect, onEdit, onDelete }: SongCardProps) {
+function KanbanCard({ song, missing, onSelect, onEdit, onDelete }: KanbanCardProps) {
+  const [isDragging, setIsDragging] = React.useState(false);
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData(MIME, song.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setIsDragging(true);
+  };
+
   return (
     <div
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={() => setIsDragging(false)}
       onClick={onSelect}
       className={cn(
-        'group relative flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition-colors',
-        onSelect ? 'cursor-pointer hover:border-zinc-300 hover:shadow-md' : 'hover:border-zinc-300',
+        'group relative cursor-grab rounded-lg border border-zinc-200 bg-white px-2.5 py-2 transition-colors active:cursor-grabbing',
+        onSelect && 'hover:border-zinc-300 hover:shadow-sm',
+        isDragging && 'opacity-40',
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-medium text-zinc-900">{song.title}</p>
-          {song.artist && (
-            <p className="mt-0.5 truncate text-xs text-zinc-500">{song.artist}</p>
-          )}
-        </div>
-        <span
-          className={cn(
-            'shrink-0 inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium',
-            SONG_STATUS_META[song.status].badge,
-          )}
-        >
-          {SONG_STATUS_META[song.status].label}
-        </span>
-      </div>
-
       <div className="flex items-center gap-1.5">
+        <p className="min-w-0 flex-1 truncate text-[13px] font-medium leading-tight text-zinc-900">
+          {song.title}
+        </p>
         {song.kind === 'original' && (
-          <span className="inline-flex items-center rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
+          <span className="shrink-0 rounded border border-violet-300 bg-violet-50 px-1 py-0 text-[9px] font-medium text-violet-700">
             原创
           </span>
         )}
+      </div>
+      {song.artist && (
+        <p className="truncate text-[10px] leading-tight text-zinc-500">{song.artist}</p>
+      )}
+      <div className="mt-1 flex items-center gap-1.5">
+        <PartsRow song={song} />
         {missing > 0 && (
-          <span className="inline-flex items-center gap-0.5 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-            <AlertTriangle className="h-3 w-3" />
-            缺 {missing}
+          <span
+            className="inline-flex shrink-0 items-center gap-0.5 rounded bg-amber-50 px-1 py-0 text-[9px] font-medium text-amber-700"
+            title={`还有 ${missing} 个 part 没有正式分配`}
+          >
+            <AlertTriangle className="h-2.5 w-2.5" />
+            {missing}
           </span>
         )}
       </div>
 
-      <PartsRow song={song} />
-
+      {/* Hover actions */}
       <div
-        className="absolute bottom-2 right-2 flex gap-0.5 rounded-md bg-white/90 opacity-0 backdrop-blur-sm group-hover:opacity-100"
+        className="absolute -right-1 -top-1 flex gap-0.5 rounded-md border border-zinc-200 bg-white shadow-sm opacity-0 group-hover:opacity-100"
         onClick={(e) => e.stopPropagation()}
       >
-        <Button variant="ghost" size="icon" onClick={onEdit}>
-          <Pencil className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={onDelete}>
-          <Trash2 className="h-4 w-4 text-red-600" />
-        </Button>
+        <button type="button" onClick={onEdit} className="p-1 text-zinc-500 hover:text-zinc-900">
+          <Pencil className="h-3 w-3" />
+        </button>
+        <button type="button" onClick={onDelete} className="p-1 text-red-500 hover:text-red-700">
+          <Trash2 className="h-3 w-3" />
+        </button>
       </div>
     </div>
   );
