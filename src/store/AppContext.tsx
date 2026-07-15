@@ -201,6 +201,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = React.useReducer(reducer, undefined, loadState);
   const writeIdRef = React.useRef('');
   const isSyncRef = React.useRef(false);
+  const firestoreReadyRef = React.useRef(false);
+  const stateRef = React.useRef(state);
+  stateRef.current = state;
 
   // Subscribe to Firestore for real-time remote updates.
   React.useEffect(() => {
@@ -209,6 +212,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       (remoteState) => {
         isSyncRef.current = true;
         dispatch({ type: 'sync', state: remoteState });
+      },
+      (hasData) => {
+        firestoreReadyRef.current = true;
+        if (!hasData) {
+          // Firestore is empty — push local state if we have meaningful data.
+          const s = stateRef.current;
+          if (s.songs.length > 0 || s.members.length > 0) {
+            const id = crypto.randomUUID();
+            writeIdRef.current = id;
+            saveToFirestore(s, id);
+          }
+        }
       },
     );
     return unsub;
@@ -222,6 +237,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isSyncRef.current = false;
       return;
     }
+    // Block Firestore writes until the first snapshot has arrived,
+    // so a fresh browser (empty localStorage) can't overwrite real data.
+    if (!firestoreReadyRef.current) return;
     const id = crypto.randomUUID();
     writeIdRef.current = id;
     saveToFirestore(state, id);

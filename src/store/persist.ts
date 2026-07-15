@@ -45,14 +45,27 @@ export function saveToFirestore(state: PersistedState, writeId: string): void {
   });
 }
 
-/** Subscribe to real-time Firestore updates. Calls `onChange` for remote changes only. */
+/**
+ * Subscribe to real-time Firestore updates.
+ * `onChange` fires for remote changes only.
+ * `onReady(hasData)` fires once on the very first snapshot so the caller
+ * knows Firestore has been consulted and it is safe to start writing.
+ */
 export function subscribeFirestore(
   localWriteId: () => string,
   onChange: (state: PersistedState) => void,
+  onReady: (hasData: boolean) => void,
 ): Unsubscribe {
   const ref = doc(db, FIRESTORE_DOC);
+  let ready = false;
   return onSnapshot(ref, (snapshot) => {
     const data = snapshot.data();
+
+    if (!ready) {
+      ready = true;
+      onReady(!!data);
+    }
+
     if (!data) return;
 
     // Skip our own writes
