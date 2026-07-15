@@ -11,6 +11,7 @@ export function emptyState(): PersistedState {
     assignments: [],
     rehearsals: [],
     availability: [],
+    shows: [],
   };
 }
 

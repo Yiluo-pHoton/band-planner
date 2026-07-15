@@ -46,6 +46,12 @@ export const migrations: Migration[] = [
       status: a.status === 'ready' ? 'practicing' : a.status,
     })),
   }),
+  // index 4: v4 -> v5. Add shows array for performance setlist planning.
+  (data) => ({
+    ...data,
+    schemaVersion: 5,
+    shows: data?.shows ?? [],
+  }),
 ];
 
 export function migrate(raw: any): PersistedState {

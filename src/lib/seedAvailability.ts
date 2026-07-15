@@ -40,11 +40,15 @@ export const SEED_RULES: SeedRule[] = [
     name: 'Nadie',
     fallback: U,
     availableWeekdays: [FRI, SAT],
+    // 5/31前没空
+    windows: [['2026-04-11', '2026-05-31', U]],
   },
   {
     name: 'Haifeng',
     fallback: U,
     availableWeekdays: [MON, TUE, WED, THU, SAT],
+    // 8/31前全没空
+    windows: [['2026-04-11', '2026-08-31', U]],
   },
   {
     name: 'Boran',
@@ -56,16 +60,16 @@ export const SEED_RULES: SeedRule[] = [
   {
     name: 'Ahem',
     fallback: U,
-    // 周五、周六都可以
+    // 周五、周六都可以, 8/31前全没空
     availableWeekdays: [FRI, SAT],
+    windows: [['2026-04-11', '2026-08-31', U]],
   },
   {
     name: 'Frank',
     fallback: U,
-    // 4月底走前的周三/周五/周六都能来
+    // 4月底走前的周三/周五/周六都能来, 8/31前全没空
     availableWeekdays: [WED, FRI, SAT],
-    // 4月底之后离开, 9月回归
-    windows: [['2026-05-01', '2026-08-31', U]],
+    windows: [['2026-04-11', '2026-08-31', U]],
   },
   {
     name: 'Yibo',
@@ -87,8 +91,8 @@ export const SEED_RULES: SeedRule[] = [
     name: '小树',
     fallback: U,
     availableWeekdays: [FRI, SAT],
-    // 5月初之后不在
-    windows: [['2026-05-04', '2026-09-26', U]],
+    // 8/31前全没空
+    windows: [['2026-04-11', '2026-08-31', U]],
   },
   {
     name: 'Sky',
@@ -124,6 +128,16 @@ export const SEED_RULES: SeedRule[] = [
       ['2026-04-11', T],
       ['2026-04-18', T],
       ['2026-04-25', T],
+    ],
+  },
+  {
+    name: 'Miffy',
+    fallback: U,
+    // 6月到8月中旬的周六有空, 其余时间没空
+    availableWeekdays: [SAT],
+    windows: [
+      ['2026-04-11', '2026-05-31', U],
+      ['2026-08-16', '2026-09-26', U],
     ],
   },
 ];

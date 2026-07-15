@@ -1,7 +1,8 @@
-import { CalendarCheck, CalendarRange, History, ListMusic, Music, Users, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, CalendarRange, ClipboardList, Download, History, ListMusic, Music, Ticket, Upload, Users, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { exportAllData, importAllData } from '@/lib/dataTransfer';
 
-export type TabKey = 'songs' | 'members' | 'memberSongs' | 'availability' | 'rehearsal' | 'history';
+export type TabKey = 'songs' | 'members' | 'memberSongs' | 'availability' | 'rehearsal' | 'history' | 'shows' | 'whoNeeds';
 
 interface NavItem {
   key: TabKey;
@@ -14,16 +15,46 @@ const NAV: NavItem[] = [
   { key: 'members', label: '成员', icon: Users },
   { key: 'memberSongs', label: '成员曲目', icon: ListMusic },
   { key: 'availability', label: 'Availability', icon: CalendarRange },
+  { key: 'whoNeeds', label: '谁需要到场', icon: ClipboardList },
   { key: 'rehearsal', label: '排练规划', icon: CalendarCheck },
   { key: 'history', label: '排练历史', icon: History },
+  { key: 'shows', label: '演出', icon: Ticket },
 ];
 
 interface SidebarProps {
   active: TabKey;
   onChange: (key: TabKey) => void;
+  onDataImported?: () => void;
 }
 
-export function Sidebar({ active, onChange }: SidebarProps) {
+export function Sidebar({ active, onChange, onDataImported }: SidebarProps) {
+  function handleExport() {
+    exportAllData();
+  }
+
+  function handleImport() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result;
+        if (typeof text !== 'string') return;
+        const ok = importAllData(text);
+        if (ok) {
+          onDataImported?.();
+        } else {
+          alert('导入失败：文件格式不正确');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }
+
   return (
     <aside className="flex h-screen w-14 flex-col border-r border-zinc-200 bg-white transition-all lg:w-56">
       {/* Logo area */}
@@ -56,6 +87,28 @@ export function Sidebar({ active, onChange }: SidebarProps) {
           );
         })}
       </nav>
+      <div className="border-t border-zinc-200 px-1.5 py-3 lg:px-2">
+        <div className="flex items-center justify-center gap-1 lg:justify-start lg:gap-2">
+          <button
+            type="button"
+            onClick={handleExport}
+            title="导出数据"
+            className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900 lg:px-3"
+          >
+            <Download className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">导出数据</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleImport}
+            title="导入数据"
+            className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900 lg:px-3"
+          >
+            <Upload className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">导入数据</span>
+          </button>
+        </div>
+      </div>
     </aside>
   );
 }

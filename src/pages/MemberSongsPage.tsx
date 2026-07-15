@@ -3,7 +3,7 @@ import { Users, Zap } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
 import { cn } from '@/lib/utils';
 import { INSTRUMENT_META } from '@/lib/instruments';
-import type { Assignment, AssignmentStatus, Instrument, Member, Song } from '@/types';
+import type { Assignment, AssignmentStatus, Instrument, Member, Song, SongStatus } from '@/types';
 
 /* ------------------------------------------------------------------ */
 /*  Types & constants                                                  */
@@ -42,6 +42,16 @@ function instrumentToGroup(inst: Instrument): InstrumentGroup {
   return 'keys';
 }
 
+/** Pick the primary group for a member by scanning all their instruments
+ *  and returning the one that appears earliest in GROUP_ORDER. */
+function primaryGroupOf(instruments: Instrument[]): InstrumentGroup {
+  const groups = new Set(instruments.map(instrumentToGroup));
+  for (const g of GROUP_ORDER) {
+    if (groups.has(g)) return g;
+  }
+  return 'keys';
+}
+
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
@@ -53,24 +63,70 @@ interface MemberSongsPageProps {
 export default function MemberSongsPage({ onSelectMember }: MemberSongsPageProps = {}) {
   const { state, updateAssignment } = useApp();
   const [dragId, setDragId] = React.useState<string | null>(null);
+  const [hiddenIds, setHiddenIds] = React.useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('band-planner:member-songs-hidden');
+      if (raw) return new Set(JSON.parse(raw) as string[]);
+    } catch { /* ignore */ }
+    return new Set();
+  });
+
+  const toggleVisibility = (id: string) => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem('band-planner:member-songs-hidden', JSON.stringify([...next]));
+      return next;
+    });
+  };
 
   const songById = React.useMemo(
     () => new Map(state.songs.map((s) => [s.id, s])),
     [state.songs],
   );
 
+  // Load kanban column order so cards respect the manual sort from the songs page.
+  const kanbanOrder = React.useMemo(() => {
+    try {
+      const raw = localStorage.getItem('band-planner:songs-kanban-order');
+      if (raw) return JSON.parse(raw) as Partial<Record<SongStatus, string[]>>;
+    } catch { /* ignore */ }
+    return {} as Partial<Record<SongStatus, string[]>>;
+  }, []);
+
   const cardsByMember = React.useMemo(() => {
+    // Build a global song position map from kanban order.
+    // Songs earlier in their status column sort first; unknown songs go to the end.
+    const songPos = new Map<string, number>();
+    for (const s of state.songs) {
+      const order = kanbanOrder[s.status];
+      if (order) {
+        const idx = order.indexOf(s.id);
+        songPos.set(s.id, idx >= 0 ? idx : 9999);
+      } else {
+        songPos.set(s.id, 9999);
+      }
+    }
+
     const map = new Map<string, CardData[]>();
     for (const m of state.members) map.set(m.id, []);
     for (const a of state.assignments) {
       const song = songById.get(a.songId);
-      if (!song) continue;
+      if (!song || song.status === 'shelved') continue;
       if (!map.has(a.memberId)) map.set(a.memberId, []);
       map.get(a.memberId)!.push({ assignment: a, song });
     }
-    for (const [, arr] of map) arr.sort((x, y) => x.song.title.localeCompare(y.song.title));
+    // Sort by kanban column position within each status, falling back to title.
+    for (const [, arr] of map) {
+      arr.sort((x, y) => {
+        const pa = songPos.get(x.song.id) ?? 9999;
+        const pb = songPos.get(y.song.id) ?? 9999;
+        if (pa !== pb) return pa - pb;
+        return x.song.title.localeCompare(y.song.title);
+      });
+    }
     return map;
-  }, [state.members, state.assignments, songById]);
+  }, [state.members, state.assignments, songById, kanbanOrder]);
 
   const handleDrop = (memberId: string, target: AssignmentStatus) => {
     if (!dragId) return;
@@ -84,23 +140,15 @@ export default function MemberSongsPage({ onSelectMember }: MemberSongsPageProps
   const groupedMembers = React.useMemo(() => {
     const groups: { group: InstrumentGroup; members: Member[] }[] =
       GROUP_ORDER.map((g) => ({ group: g, members: [] }));
-    const placed = new Set<string>();
 
-    for (const { group, members: bucket } of groups) {
-      for (const m of state.members) {
-        if (placed.has(m.id)) continue;
-        if (!m.instruments[0]) continue;
-        const primary = instrumentToGroup(m.instruments[0]);
-        if (primary === group) {
-          bucket.push(m);
-          placed.add(m.id);
-        }
-      }
+    for (const m of state.members) {
+      const g = primaryGroupOf(m.instruments);
+      const bucket = groups.find((x) => x.group === g);
+      if (bucket) bucket.members.push(m);
+    }
+    for (const { members: bucket } of groups) {
       bucket.sort((a, b) => a.name.localeCompare(b.name));
     }
-    // Anyone not placed (no instruments) goes at the end.
-    const unplaced = state.members.filter((m) => !placed.has(m.id));
-    if (unplaced.length > 0) groups.push({ group: 'keys' as InstrumentGroup, members: unplaced });
 
     return groups.filter((g) => g.members.length > 0);
   }, [state.members]);
@@ -113,6 +161,33 @@ export default function MemberSongsPage({ onSelectMember }: MemberSongsPageProps
           <p className="text-sm text-zinc-500 mt-1">拖拽切状态，点击切替补</p>
         </div>
 
+        {/* Member visibility toggles */}
+        {state.members.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 px-2">
+            <span className="text-xs text-zinc-400 mr-1">显示:</span>
+            {state.members.map((m) => {
+              const hidden = hiddenIds.has(m.id);
+              const inst = m.instruments[0] ? INSTRUMENT_META[m.instruments[0]].abbrev : '';
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => toggleVisibility(m.id)}
+                  className={cn(
+                    'rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors',
+                    hidden
+                      ? 'bg-zinc-100 text-zinc-400'
+                      : 'bg-zinc-900 text-white',
+                  )}
+                >
+                  {m.name}
+                  <span className="ml-0.5 opacity-60">{inst}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {state.members.length === 0 ? (
           <div className="mt-8 rounded-xl border border-dashed border-zinc-200 bg-white py-16 text-center">
             <Users className="mx-auto h-10 w-10 text-zinc-300 mb-3" />
@@ -121,7 +196,10 @@ export default function MemberSongsPage({ onSelectMember }: MemberSongsPageProps
           </div>
         ) : (
           <div className="mt-5 flex gap-4 overflow-x-auto pb-2">
-            {groupedMembers.map(({ group, members }) => (
+            {groupedMembers.map(({ group, members }) => {
+              const visibleMembers = members.filter((m) => !hiddenIds.has(m.id));
+              if (visibleMembers.length === 0) return null;
+              return (
               <div key={group} className="flex gap-2">
                 {/* Group label — vertical text */}
                 <div className="flex w-5 shrink-0 items-start justify-center pt-2">
@@ -129,7 +207,7 @@ export default function MemberSongsPage({ onSelectMember }: MemberSongsPageProps
                     {GROUP_LABEL[group]}
                   </span>
                 </div>
-                {members.map((m) => (
+                {visibleMembers.map((m) => (
                   <MemberColumn
                     key={m.id}
                     member={m}
@@ -143,7 +221,8 @@ export default function MemberSongsPage({ onSelectMember }: MemberSongsPageProps
                   />
                 ))}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

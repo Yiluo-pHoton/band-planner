@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { Assignment, Availability, Member, PersistedState, Rehearsal, Song } from '@/types';
+import type { Assignment, Availability, Member, PersistedState, Rehearsal, Show, Song } from '@/types';
 import { loadState, saveState } from '@/store/persist';
 
 // Action types are union-typed so the reducer is exhaustive.
@@ -18,7 +18,10 @@ type Action =
   | { type: 'rehearsals/update'; rehearsal: Rehearsal }
   | { type: 'rehearsals/delete'; id: string }
   // Upsert: replaces any existing row for (memberId, date). Pass status=null to clear.
-  | { type: 'availability/set'; memberId: string; date: string; status: Availability['status'] | null };
+  | { type: 'availability/set'; memberId: string; date: string; status: Availability['status'] | null }
+  | { type: 'shows/add'; show: Show }
+  | { type: 'shows/update'; show: Show }
+  | { type: 'shows/delete'; id: string };
 
 function reducer(state: PersistedState, action: Action): PersistedState {
   switch (action.type) {
@@ -39,12 +42,16 @@ function reducer(state: PersistedState, action: Action): PersistedState {
     }
 
     case 'songs/delete':
-      // Cascade: drop assignments that reference this song.
-      // See band-planner-data-model invariant #1.
+      // Cascade: drop assignments that reference this song + remove from show setlists.
       return {
         ...state,
         songs: state.songs.filter((s) => s.id !== action.id),
         assignments: state.assignments.filter((a) => a.songId !== action.id),
+        shows: state.shows.map((sh) =>
+          sh.setlistSongIds.includes(action.id)
+            ? { ...sh, setlistSongIds: sh.setlistSongIds.filter((sid) => sid !== action.id) }
+            : sh,
+        ),
       };
 
     case 'members/add':
@@ -65,7 +72,7 @@ function reducer(state: PersistedState, action: Action): PersistedState {
     }
 
     case 'members/delete':
-      // Cascade: drop assignments + availability + composer/lyricist refs for this member.
+      // Cascade: drop assignments + availability + composer/lyricist refs + show performer refs.
       return {
         ...state,
         members: state.members.filter((m) => m.id !== action.id),
@@ -81,6 +88,11 @@ function reducer(state: PersistedState, action: Action): PersistedState {
             lyricistIds: hasL ? s.lyricistIds!.filter((id) => id !== action.id) : s.lyricistIds,
           };
         }),
+        shows: state.shows.map((sh) =>
+          sh.performerIds.includes(action.id)
+            ? { ...sh, performerIds: sh.performerIds.filter((pid) => pid !== action.id) }
+            : sh,
+        ),
       };
 
     case 'assignments/add':
@@ -140,6 +152,18 @@ function reducer(state: PersistedState, action: Action): PersistedState {
       };
     }
 
+    case 'shows/add':
+      return { ...state, shows: [...state.shows, action.show] };
+
+    case 'shows/update':
+      return {
+        ...state,
+        shows: state.shows.map((sh) => (sh.id === action.show.id ? action.show : sh)),
+      };
+
+    case 'shows/delete':
+      return { ...state, shows: state.shows.filter((sh) => sh.id !== action.id) };
+
     default: {
       const _exhaustive: never = action;
       return _exhaustive;
@@ -162,6 +186,9 @@ interface AppContextValue {
   updateRehearsal: (rehearsal: Rehearsal) => void;
   deleteRehearsal: (id: string) => void;
   setAvailability: (memberId: string, date: string, status: Availability['status'] | null) => void;
+  addShow: (show: Show) => void;
+  updateShow: (show: Show) => void;
+  deleteShow: (id: string) => void;
 }
 
 const AppContext = React.createContext<AppContextValue | null>(null);
@@ -191,6 +218,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteRehearsal: (id) => dispatch({ type: 'rehearsals/delete', id }),
       setAvailability: (memberId, date, status) =>
         dispatch({ type: 'availability/set', memberId, date, status }),
+      addShow: (show) => dispatch({ type: 'shows/add', show }),
+      updateShow: (show) => dispatch({ type: 'shows/update', show }),
+      deleteShow: (id) => dispatch({ type: 'shows/delete', id }),
     }),
     [state],
   );

@@ -315,6 +315,30 @@ const STATUS_TINT: Record<string, string> = {
 };
 
 const MIME = 'application/x-band-song-id';
+const ORDER_KEY = 'band-planner:songs-kanban-order';
+
+type ColumnOrder = Partial<Record<SongStatus, string[]>>;
+
+function loadColumnOrder(): ColumnOrder {
+  try {
+    const raw = localStorage.getItem(ORDER_KEY);
+    if (raw) return JSON.parse(raw) as ColumnOrder;
+  } catch { /* ignore */ }
+  return {};
+}
+
+function saveColumnOrder(order: ColumnOrder) {
+  localStorage.setItem(ORDER_KEY, JSON.stringify(order));
+}
+
+function sortByOrder(songs: Song[], order: string[]): Song[] {
+  const posMap = new Map(order.map((id, i) => [id, i]));
+  return [...songs].sort((a, b) => {
+    const pa = posMap.get(a.id) ?? Infinity;
+    const pb = posMap.get(b.id) ?? Infinity;
+    return pa - pb;
+  });
+}
 
 interface KanbanBoardProps {
   songs: Song[];
@@ -327,28 +351,63 @@ interface KanbanBoardProps {
 
 function KanbanBoard({ songs, assignments, onSelect, onEdit, onDelete, onStatusChange }: KanbanBoardProps) {
   const [dragOver, setDragOver] = React.useState<SongStatus | null>(null);
+  const [dragOverIdx, setDragOverIdx] = React.useState<number | null>(null);
+  const [columnOrder, setColumnOrder] = React.useState<ColumnOrder>(loadColumnOrder);
 
-  const columns = SONG_STATUSES.map((status) => ({
-    status,
-    meta: SONG_STATUS_META[status],
-    songs: songs.filter((s) => s.status === status),
-  }));
+  const updateOrder = (next: ColumnOrder) => {
+    setColumnOrder(next);
+    saveColumnOrder(next);
+  };
+
+  const columns = SONG_STATUSES.map((status) => {
+    const colSongs = songs.filter((s) => s.status === status);
+    const order = columnOrder[status] ?? [];
+    return {
+      status,
+      meta: SONG_STATUS_META[status],
+      songs: sortByOrder(colSongs, order),
+    };
+  });
 
   const visibleColumns = columns.filter((c) => c.songs.length > 0 || c.status !== 'shelved');
 
-  const handleDrop = (targetStatus: SongStatus, e: React.DragEvent) => {
+  const handleDrop = (targetStatus: SongStatus, e: React.DragEvent, insertIdx?: number) => {
     e.preventDefault();
     setDragOver(null);
+    setDragOverIdx(null);
     const songId = e.dataTransfer.getData(MIME);
     if (!songId) return;
     const song = songs.find((s) => s.id === songId);
-    if (song && song.status !== targetStatus) {
-      // Don't allow dragging covers into 'writing' or writing-locked originals out of 'writing'
+    if (!song) return;
+
+    const sameColumn = song.status === targetStatus;
+
+    if (!sameColumn) {
+      // Cross-column: validate status change
       if (targetStatus === 'writing' && song.kind !== 'original') return;
       if (song.status === 'writing' && song.kind === 'original' && !(song.composerReady && song.lyricistReady)) return;
-      // Songs with unassigned parts can't progress beyond 'learning'
       const missing = unassignedCount(song, assignments);
       if (!isStatusAllowed(targetStatus, missing)) return;
+    }
+
+    // Update column order
+    const next = { ...columnOrder };
+
+    // Remove from source column order
+    const sourceStatus = song.status;
+    const sourceOrder = (next[sourceStatus] ?? columns.find((c) => c.status === sourceStatus)!.songs.map((s) => s.id)).filter((id) => id !== songId);
+    next[sourceStatus] = sourceOrder;
+
+    // Insert into target column order
+    const targetCol = columns.find((c) => c.status === targetStatus)!;
+    const targetOrder = (next[targetStatus] ?? targetCol.songs.map((s) => s.id)).filter((id) => id !== songId);
+    const idx = insertIdx != null ? Math.min(insertIdx, targetOrder.length) : targetOrder.length;
+    targetOrder.splice(idx, 0, songId);
+    next[targetStatus] = targetOrder;
+
+    updateOrder(next);
+
+    if (!sameColumn) {
       onStatusChange(song, targetStatus);
     }
   };
@@ -366,7 +425,7 @@ function KanbanBoard({ songs, assignments, onSelect, onEdit, onDelete, onStatusC
             e.preventDefault();
             setDragOver(col.status);
           }}
-          onDragLeave={() => setDragOver(null)}
+          onDragLeave={() => { setDragOver(null); setDragOverIdx(null); }}
           onDrop={(e) => handleDrop(col.status, e)}
         >
           <div className={cn('flex items-center justify-between rounded-t-xl border-b px-3 py-2', STATUS_TINT[col.status])}>
@@ -389,13 +448,16 @@ function KanbanBoard({ songs, assignments, onSelect, onEdit, onDelete, onStatusC
                 {dragOver === col.status ? '放到这里' : '暂无'}
               </p>
             ) : (
-              col.songs.map((song) => {
+              col.songs.map((song, idx) => {
                 const missing = unassignedCount(song, assignments);
                 return (
                   <KanbanCard
                     key={song.id}
                     song={song}
                     missing={missing}
+                    isDropTarget={dragOver === col.status && dragOverIdx === idx}
+                    onDragOver={() => { setDragOver(col.status); setDragOverIdx(idx); }}
+                    onDrop={(e) => { e.stopPropagation(); handleDrop(col.status, e, idx); }}
                     onSelect={onSelect ? () => onSelect(song.id) : undefined}
                     onEdit={() => onEdit(song)}
                     onDelete={() => onDelete(song)}
@@ -413,12 +475,15 @@ function KanbanBoard({ songs, assignments, onSelect, onEdit, onDelete, onStatusC
 interface KanbanCardProps {
   song: Song;
   missing: number;
+  isDropTarget?: boolean;
+  onDragOver?: () => void;
+  onDrop?: (e: React.DragEvent) => void;
   onSelect?: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-function KanbanCard({ song, missing, onSelect, onEdit, onDelete }: KanbanCardProps) {
+function KanbanCard({ song, missing, isDropTarget, onDragOver, onDrop, onSelect, onEdit, onDelete }: KanbanCardProps) {
   const [isDragging, setIsDragging] = React.useState(false);
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -432,9 +497,12 @@ function KanbanCard({ song, missing, onSelect, onEdit, onDelete }: KanbanCardPro
       draggable
       onDragStart={handleDragStart}
       onDragEnd={() => setIsDragging(false)}
+      onDragOver={(e) => { e.preventDefault(); onDragOver?.(); }}
+      onDrop={onDrop}
       onClick={onSelect}
       className={cn(
-        'group relative cursor-grab rounded-lg border border-zinc-200 bg-white px-2.5 py-2 transition-colors active:cursor-grabbing',
+        'group relative cursor-grab rounded-lg border bg-white px-2.5 py-2 transition-colors active:cursor-grabbing',
+        isDropTarget ? 'border-zinc-400 border-t-2' : 'border-zinc-200',
         onSelect && 'hover:border-zinc-300 hover:shadow-sm',
         isDragging && 'opacity-40',
       )}

@@ -74,6 +74,19 @@ export interface Availability {
 
 export type AvailabilityStatus = 'available' | 'unavailable' | 'tentative';
 
+export interface Show {
+  id: string;
+  title: string;
+  date: string;                 // YYYY-MM-DD wall-clock
+  performerIds: string[];       // FK -> Member.id — who's performing
+  setlistSongIds: string[];     // ordered list of Song.id — array order = performance order
+  minSongs?: number;            // capacity lower bound
+  maxSongs?: number;            // capacity upper bound
+  durationMinutes?: number;     // alternative capacity constraint
+  notes?: string;
+  createdAt: string;            // ISO 8601 datetime
+}
+
 export interface PersistedState {
   schemaVersion: number;
   songs: Song[];
@@ -81,4 +94,5 @@ export interface PersistedState {
   assignments: Assignment[];
   rehearsals: Rehearsal[];
   availability: Availability[];
+  shows: Show[];
 }
