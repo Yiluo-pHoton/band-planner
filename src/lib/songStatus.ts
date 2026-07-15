@@ -11,12 +11,12 @@ export const SONG_STATUS_META: Record<SongStatus, { label: string; badge: string
 
 // Display order in selects (priority high to low, with shelved at the end)
 export const SONG_STATUSES: SongStatus[] = [
-  'writing',
   'learning',
   'rehearsing',
   'polishing',
   'ready',
   'shelved',
+  'writing',
 ];
 
 // Progression order (shelved is special — always allowed as a sideways move)

@@ -5,6 +5,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
 import { cn, toLocalDateString } from '@/lib/utils';
 import { applySeedAvailability } from '@/lib/seedAvailability';
+import { getRehearsalDay, setRehearsalDay, ALL_WEEKDAYS, type WeekDay } from '@/lib/rehearsalDay';
 import type { Availability } from '@/types';
 
 type Brush = 'available' | 'unavailable' | 'tentative' | 'clear';
@@ -43,6 +44,13 @@ export default function AvailabilityPage() {
   const [painting, setPainting] = React.useState(false);
   const [seedConfirmOpen, setSeedConfirmOpen] = React.useState(false);
   const [seedReport, setSeedReport] = React.useState<string | null>(null);
+  const [rDay, setRDay] = React.useState<WeekDay>(getRehearsalDay);
+
+  const handleRehearsalDayChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const v = Number(e.target.value) as WeekDay;
+    setRDay(v);
+    setRehearsalDay(v);
+  };
 
   // End paint on global mouseup so dragging out of the grid still ends cleanly.
   React.useEffect(() => {
@@ -84,22 +92,23 @@ export default function AvailabilityPage() {
 
   const today = toLocalDateString(new Date());
 
-  // The Saturday of the real current week (containing today).
-  const thisSaturday = React.useMemo(() => {
+  // The next rehearsal day of the current week (containing today).
+  const thisRehearsalDay = React.useMemo(() => {
     const s = startOfWeek(new Date()); // Monday
-    return toLocalDateString(addDays(s, 5));
-  }, []);
+    const offset = rDay === 0 ? 6 : rDay - 1; // Monday=0 offset
+    return toLocalDateString(addDays(s, offset));
+  }, [rDay]);
 
-  // Sort members by this-Saturday status: available/blank (0) → tentative (1) → unavailable (2).
+  // Sort members by rehearsal-day status: available/blank (0) → tentative (1) → unavailable (2).
   const members = React.useMemo(() => {
     const rank = (memberId: string): number => {
-      const st = lookup.get(`${memberId}|${thisSaturday}`);
+      const st = lookup.get(`${memberId}|${thisRehearsalDay}`);
       if (st === 'unavailable') return 2;
       if (st === 'tentative') return 1;
       return 0; // 'available' or null
     };
     return [...state.members].sort((a, b) => rank(a.id) - rank(b.id));
-  }, [state.members, lookup, thisSaturday]);
+  }, [state.members, lookup, thisRehearsalDay]);
 
   // Date columns where every member is non-unavailable → "everyone can come".
   const everyoneDates = React.useMemo(() => {
@@ -125,10 +134,24 @@ export default function AvailabilityPage() {
               拖动单元格标记每个成员的不可用时间。空白 = 默认可用。
             </p>
           </div>
-          <Button variant="secondary" onClick={() => setSeedConfirmOpen(true)}>
-            <Download className="mr-1 h-4 w-4" />
-            导入示例数据
-          </Button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-zinc-500">排练日</span>
+              <select
+                value={rDay}
+                onChange={handleRehearsalDayChange}
+                className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-900"
+              >
+                {ALL_WEEKDAYS.map((wd) => (
+                  <option key={wd.value} value={wd.value}>{wd.label}</option>
+                ))}
+              </select>
+            </div>
+            <Button variant="secondary" onClick={() => setSeedConfirmOpen(true)}>
+              <Download className="mr-1 h-4 w-4" />
+              导入示例数据
+            </Button>
+          </div>
         </div>
         {seedReport && (
           <div className="mt-3 rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700">

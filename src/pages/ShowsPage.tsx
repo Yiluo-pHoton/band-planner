@@ -3,28 +3,13 @@ import { Calendar, Plus, Trash2, Pencil, Ticket } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
 import type { Show } from '@/types';
 import { cn } from '@/lib/utils';
+import { getRehearsalDay, countWeekdaysBetween } from '@/lib/rehearsalDay';
 
 function toLocalDateString(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
-}
-
-function countSaturdaysBetween(from: string, to: string): number {
-  const start = new Date(from + 'T00:00:00');
-  const end = new Date(to + 'T00:00:00');
-  let count = 0;
-  const cur = new Date(start);
-  // Move to next Saturday
-  while (cur.getDay() !== 6) {
-    cur.setDate(cur.getDate() + 1);
-  }
-  while (cur <= end) {
-    count++;
-    cur.setDate(cur.getDate() + 7);
-  }
-  return count;
 }
 
 function daysUntil(dateStr: string): number {
@@ -84,7 +69,7 @@ export default function ShowsPage({ onSelectShow }: ShowsPageProps) {
           <div className="space-y-3">
             {sorted.map((show) => {
               const days = daysUntil(show.date);
-              const rehearsals = countSaturdaysBetween(todayStr, show.date);
+              const rehearsals = countWeekdaysBetween(todayStr, show.date, getRehearsalDay());
               const isPast = days < 0;
               const setlistCount = show.setlistSongIds.length;
               const capacityLabel = show.minSongs != null && show.maxSongs != null

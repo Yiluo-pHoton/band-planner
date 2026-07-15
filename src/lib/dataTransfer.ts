@@ -5,6 +5,8 @@ const PREF_KEYS = [
   'band-planner:songs-kanban-order',
   'band-planner:member-songs-hidden',
   'band-planner:who-needs-songs',
+  'band-planner:rehearsal-show-ready',
+  'band-planner:rehearsal-day',
 ] as const;
 
 interface ExportBundle {

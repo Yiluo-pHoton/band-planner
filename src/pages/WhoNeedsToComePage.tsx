@@ -180,42 +180,64 @@ export default function WhoNeedsToComePage() {
     return results;
   }, [selectedIds, state.songs, state.assignments]);
 
+  // Group songs by status for the picker
+  const songsByStatus = React.useMemo(() => {
+    const statusOrder: Song['status'][] = ['ready', 'polishing', 'rehearsing', 'learning'];
+    const groups: { status: Song['status']; label: string; songs: Song[] }[] = [];
+    for (const st of statusOrder) {
+      const bucket = activeSongs.filter((s) => s.status === st);
+      if (bucket.length > 0) {
+        groups.push({ status: st, label: SONG_STATUS_META[st].label, songs: bucket });
+      }
+    }
+    return groups;
+  }, [activeSongs]);
+
   return (
     <div className="p-6">
       <div className="mx-auto max-w-5xl">
         <h1 className="text-2xl font-semibold text-zinc-900">谁需要到场</h1>
         <p className="text-sm text-zinc-500 mt-1">选几首歌，看看需要哪些人</p>
 
-        {/* Song picker */}
-        <div className="mt-5">
-          <div className="flex items-center gap-3 mb-2">
+        {/* Song picker — grouped by status */}
+        <div className="mt-5 rounded-lg border border-zinc-200 bg-white p-4">
+          <div className="flex items-center gap-3 mb-3">
             <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">选择曲目</p>
             <button type="button" onClick={selectAll} className="text-xs text-zinc-400 hover:text-zinc-600">全选</button>
             <button type="button" onClick={clearAll} className="text-xs text-zinc-400 hover:text-zinc-600">清空</button>
+            {selectedIds.size > 0 && (
+              <span className="text-xs text-zinc-400">已选 {selectedIds.size} 首</span>
+            )}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {activeSongs.map((song) => {
-              const selected = selectedIds.has(song.id);
-              const meta = SONG_STATUS_META[song.status];
+          <div className="space-y-2">
+            {songsByStatus.map(({ status, label, songs: bucket }) => {
+              const meta = SONG_STATUS_META[status];
               return (
-                <button
-                  key={song.id}
-                  type="button"
-                  onClick={() => toggle(song.id)}
-                  className={cn(
-                    'rounded-md border px-2.5 py-1 text-xs font-medium transition-colors',
-                    selected
-                      ? 'bg-zinc-900 text-white border-zinc-900'
-                      : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50',
-                  )}
-                >
-                  {song.title}
-                  {!selected && (
-                    <span className={cn('ml-1.5 inline-block rounded px-1 py-0.5 text-[10px] border', meta.badge)}>
-                      {meta.label}
-                    </span>
-                  )}
-                </button>
+                <div key={status} className="flex items-start gap-2">
+                  <span className={cn('shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium mt-0.5', meta.badge)}>
+                    {label}
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {bucket.map((song) => {
+                      const selected = selectedIds.has(song.id);
+                      return (
+                        <button
+                          key={song.id}
+                          type="button"
+                          onClick={() => toggle(song.id)}
+                          className={cn(
+                            'rounded border px-2 py-0.5 text-xs font-medium transition-colors',
+                            selected
+                              ? 'bg-zinc-900 text-white border-zinc-900'
+                              : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50',
+                          )}
+                        >
+                          {song.title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -233,49 +255,29 @@ export default function WhoNeedsToComePage() {
               需要到场 ({needs.length} 人)
             </p>
 
-            <div className="space-y-4">
+            <div className="rounded-lg border border-zinc-200 bg-white divide-y divide-zinc-100">
               {groupedNeeds.map(({ group, label, members: grpNeeds }) => (
-                <div key={group}>
+                <div key={group} className="px-4 py-3">
                   <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">{label}</p>
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="space-y-1.5">
                     {grpNeeds.map(({ member, regularSongs, emergencySongs }) => (
-                      <div
-                        key={member.id}
-                        className="rounded-lg border border-zinc-200 bg-white p-3"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-sm font-semibold text-zinc-900">{member.name}</p>
-                          <span className="text-xs text-zinc-400">
-                            {member.instruments.map((i) => INSTRUMENT_META[i].abbrev).join('/')}
-                          </span>
+                      <div key={member.id} className="flex items-start gap-3">
+                        <span className="shrink-0 w-16 text-sm font-medium text-zinc-900 pt-0.5">{member.name}</span>
+                        <div className="flex flex-wrap items-center gap-1 min-w-0">
+                          {regularSongs.map(({ song, parts }) => (
+                            <span key={song.id} className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-xs text-zinc-700">
+                              {song.title}
+                              <span className="text-zinc-400 text-[10px]">{parts.map((p) => INSTRUMENT_META[p].abbrev).join('+')}</span>
+                            </span>
+                          ))}
+                          {emergencySongs.map(({ song, parts }) => (
+                            <span key={song.id} className="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs text-amber-600">
+                              {song.title}
+                              <span className="text-amber-400 text-[10px]">{parts.map((p) => INSTRUMENT_META[p].abbrev).join('+')}</span>
+                              <span className="text-[10px]">替补</span>
+                            </span>
+                          ))}
                         </div>
-
-                        {regularSongs.length > 0 && (
-                          <div className="space-y-0.5">
-                            {regularSongs.map(({ song, parts }) => (
-                              <div key={song.id} className="flex items-center gap-1.5 text-xs">
-                                <span className="text-zinc-800 truncate">{song.title}</span>
-                                <span className="shrink-0 text-zinc-400">
-                                  {parts.map((p) => INSTRUMENT_META[p].abbrev).join('+')}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {emergencySongs.length > 0 && (
-                          <div className="mt-1.5 border-t border-zinc-100 pt-1.5">
-                            <p className="text-[10px] text-amber-500 font-medium mb-0.5">替补</p>
-                            {emergencySongs.map(({ song, parts }) => (
-                              <div key={song.id} className="flex items-center gap-1.5 text-xs text-zinc-400">
-                                <span className="truncate">{song.title}</span>
-                                <span className="shrink-0">
-                                  {parts.map((p) => INSTRUMENT_META[p].abbrev).join('+')}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     ))}
                   </div>

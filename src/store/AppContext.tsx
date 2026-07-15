@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { Assignment, Availability, Member, PersistedState, Rehearsal, Show, Song } from '@/types';
-import { loadState, saveState } from '@/store/persist';
+import { loadState, saveState, saveToFirestore, subscribeFirestore } from '@/store/persist';
 
 // Action types are union-typed so the reducer is exhaustive.
 // Add new entity actions here as we add them in later steps.
@@ -21,7 +21,8 @@ type Action =
   | { type: 'availability/set'; memberId: string; date: string; status: Availability['status'] | null }
   | { type: 'shows/add'; show: Show }
   | { type: 'shows/update'; show: Show }
-  | { type: 'shows/delete'; id: string };
+  | { type: 'shows/delete'; id: string }
+  | { type: 'sync'; state: PersistedState };
 
 function reducer(state: PersistedState, action: Action): PersistedState {
   switch (action.type) {
@@ -164,6 +165,9 @@ function reducer(state: PersistedState, action: Action): PersistedState {
     case 'shows/delete':
       return { ...state, shows: state.shows.filter((sh) => sh.id !== action.id) };
 
+    case 'sync':
+      return action.state;
+
     default: {
       const _exhaustive: never = action;
       return _exhaustive;
@@ -195,10 +199,32 @@ const AppContext = React.createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = React.useReducer(reducer, undefined, loadState);
+  const writeIdRef = React.useRef('');
+  const isSyncRef = React.useRef(false);
 
-  // Persist on every state change.
+  // Subscribe to Firestore for real-time remote updates.
+  React.useEffect(() => {
+    const unsub = subscribeFirestore(
+      () => writeIdRef.current,
+      (remoteState) => {
+        isSyncRef.current = true;
+        dispatch({ type: 'sync', state: remoteState });
+      },
+    );
+    return unsub;
+  }, []);
+
+  // Persist on every state change (localStorage + Firestore).
   React.useEffect(() => {
     saveState(state);
+    // Don't write back to Firestore if this change came from a remote sync.
+    if (isSyncRef.current) {
+      isSyncRef.current = false;
+      return;
+    }
+    const id = crypto.randomUUID();
+    writeIdRef.current = id;
+    saveToFirestore(state, id);
   }, [state]);
 
   const value = React.useMemo<AppContextValue>(

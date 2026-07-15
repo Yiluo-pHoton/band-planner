@@ -4,6 +4,7 @@ import { useApp } from '@/store/AppContext';
 import { INSTRUMENTS } from '@/lib/instruments';
 import { SONG_STATUS_META } from '@/lib/songStatus';
 import { cn } from '@/lib/utils';
+import { getRehearsalDay, countWeekdaysBetween, collectWeekdaysBetween, rehearsalDayLabel } from '@/lib/rehearsalDay';
 import type { Assignment, Instrument, Member, Rehearsal, Show, Song } from '@/types';
 
 /* ---- helpers ---- */
@@ -20,16 +21,6 @@ function daysUntil(dateStr: string): number {
   today.setHours(0, 0, 0, 0);
   const target = new Date(dateStr + 'T00:00:00');
   return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function countSaturdaysBetween(from: string, to: string): number {
-  const start = new Date(from + 'T00:00:00');
-  const end = new Date(to + 'T00:00:00');
-  let count = 0;
-  const cur = new Date(start);
-  while (cur.getDay() !== 6) cur.setDate(cur.getDate() + 1);
-  while (cur <= end) { count++; cur.setDate(cur.getDate() + 7); }
-  return count;
 }
 
 /** Readiness score (0-100) for a song relative to a set of performer IDs. */
@@ -121,14 +112,15 @@ export default function ShowDetailPage({ showId, onBack, onSelectSong }: ShowDet
 
   const todayStr = toLocalDateString(new Date());
   const days = daysUntil(show.date);
-  // Count rehearsals: Saturdays between today and show date + any manually-added non-Saturday rehearsals
-  const saturdayCount = countSaturdaysBetween(todayStr, show.date);
-  const manualNonSaturday = state.rehearsals.filter((r) => {
+  // Count rehearsals: rehearsal-day occurrences between today and show date + any manually-added off-day rehearsals
+  const rDay = getRehearsalDay();
+  const rehearsalDayCount = countWeekdaysBetween(todayStr, show.date, rDay);
+  const manualOffDay = state.rehearsals.filter((r) => {
     if (r.date <= todayStr || r.date > show.date) return false;
     const d = new Date(r.date + 'T00:00:00');
-    return d.getDay() !== 6;
+    return d.getDay() !== rDay;
   }).length;
-  const rehearsals = saturdayCount + manualNonSaturday;
+  const rehearsals = rehearsalDayCount + manualOffDay;
 
   return (
     <div className="p-6">
@@ -535,22 +527,6 @@ function SetlistPanel({
 
 /* ---- Rehearsal schedule ---- */
 
-function collectSaturdaysBetween(from: string, to: string): string[] {
-  const dates: string[] = [];
-  const start = new Date(from + 'T00:00:00');
-  const end = new Date(to + 'T00:00:00');
-  const cur = new Date(start);
-  while (cur.getDay() !== 6) cur.setDate(cur.getDate() + 1);
-  while (cur <= end) {
-    const y = cur.getFullYear();
-    const m = String(cur.getMonth() + 1).padStart(2, '0');
-    const d = String(cur.getDate()).padStart(2, '0');
-    dates.push(`${y}-${m}-${d}`);
-    cur.setDate(cur.getDate() + 7);
-  }
-  return dates;
-}
-
 function RehearsalSchedule({
   showDate,
   rehearsals,
@@ -566,10 +542,13 @@ function RehearsalSchedule({
   const [expanded, setExpanded] = React.useState(false);
   const todayStr = toLocalDateString(new Date());
 
-  // Auto Saturdays between now and show
-  const saturdays = React.useMemo(
-    () => new Set(collectSaturdaysBetween(todayStr, showDate)),
-    [todayStr, showDate],
+  const rDay = getRehearsalDay();
+  const rDayLabel = rehearsalDayLabel(rDay);
+
+  // Auto rehearsal days between now and show
+  const rehearsalDays = React.useMemo(
+    () => new Set(collectWeekdaysBetween(todayStr, showDate, rDay)),
+    [todayStr, showDate, rDay],
   );
 
   // Existing rehearsal dates from store
@@ -583,12 +562,12 @@ function RehearsalSchedule({
     return m;
   }, [rehearsals, todayStr, showDate]);
 
-  // Merge: all saturdays + manually added non-saturday rehearsals
+  // Merge: all rehearsalDays + manually added non-saturday rehearsals
   const allDates = React.useMemo(() => {
-    const set = new Set(saturdays);
+    const set = new Set(rehearsalDays);
     for (const d of existingDates.keys()) set.add(d);
     return [...set].sort();
-  }, [saturdays, existingDates]);
+  }, [rehearsalDays, existingDates]);
 
   const handleAdd = () => {
     if (!addingDate || addingDate <= todayStr || addingDate > showDate) return;
@@ -622,18 +601,18 @@ function RehearsalSchedule({
         <div className="mt-2">
           <div className="flex flex-wrap gap-2 mb-2">
             {allDates.map((date) => {
-              const isSaturday = saturdays.has(date);
-              const isManual = existingDates.has(date) && !isSaturday;
+              const isRehearsalDay = rehearsalDays.has(date);
+              const isManual = existingDates.has(date) && !isRehearsalDay;
               return (
                 <span
                   key={date}
                   className={cn(
                     'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs',
-                    isSaturday ? 'bg-zinc-100 text-zinc-600' : 'bg-amber-50 text-amber-700 border border-amber-200',
+                    isRehearsalDay ? 'bg-zinc-100 text-zinc-600' : 'bg-amber-50 text-amber-700 border border-amber-200',
                   )}
                 >
                   {date.slice(5)}
-                  {isSaturday && <span className="text-zinc-400">六</span>}
+                  {isRehearsalDay && <span className="text-zinc-400">{rDayLabel.slice(1)}</span>}
                   {isManual && (
                     <button
                       type="button"

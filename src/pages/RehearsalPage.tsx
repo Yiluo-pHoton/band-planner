@@ -14,6 +14,7 @@ import {
 } from '@/lib/rehearsalPlanner';
 import { Input } from '@/components/ui/input';
 import { cn, toLocalDateString } from '@/lib/utils';
+import { getRehearsalDay, nearestWeekday, rehearsalDayLabel } from '@/lib/rehearsalDay';
 import type { Instrument, Song } from '@/types';
 
 // Short Chinese labels for the rehearsal page part rows.
@@ -39,21 +40,34 @@ export default function RehearsalPage({
 }: RehearsalPageProps) {
   const { state, addRehearsal } = useApp();
   const [saveOpen, setSaveOpen] = React.useState(false);
+  const [showReady, setShowReady] = React.useState(() => {
+    try {
+      return localStorage.getItem('band-planner:rehearsal-show-ready') !== 'false';
+    } catch { return true; }
+  });
 
-  // Compute nearest Saturday for initial date.
-  const nearestSaturday = React.useMemo(() => {
-    const d = new Date();
-    const day = d.getDay();
-    const forward = (6 - day + 7) % 7;
-    const back = forward === 0 ? 0 : 7 - forward;
-    const delta = back <= forward ? -back : forward;
-    d.setDate(d.getDate() + delta);
-    return toLocalDateString(d);
-  }, []);
+  const toggleShowReady = () => {
+    setShowReady((prev) => {
+      const next = !prev;
+      localStorage.setItem('band-planner:rehearsal-show-ready', String(next));
+      return next;
+    });
+  };
 
-  const [date, setDate] = React.useState(nearestSaturday);
+  const filterReady = (songs: Song[]) =>
+    showReady ? songs : songs.filter((s) => s.status !== 'ready');
 
-  // On mount, auto-prefill attendance for the nearest Saturday.
+  const rehearsalDay = getRehearsalDay();
+
+  // Compute nearest rehearsal day for initial date.
+  const nearestRehearsalDate = React.useMemo(
+    () => toLocalDateString(nearestWeekday(rehearsalDay)),
+    [rehearsalDay],
+  );
+
+  const [date, setDate] = React.useState(nearestRehearsalDate);
+
+  // On mount, auto-prefill attendance for the nearest rehearsal day.
   const mountRef = React.useRef(false);
   React.useEffect(() => {
     if (mountRef.current) return;
@@ -61,14 +75,14 @@ export default function RehearsalPage({
     const suggested = new Set<string>();
     for (const m of state.members) {
       const av = state.availability.find(
-        (a) => a.memberId === m.id && a.date === nearestSaturday,
+        (a) => a.memberId === m.id && a.date === nearestRehearsalDate,
       );
       if (av?.status !== 'unavailable' && av?.status !== 'tentative') {
         suggested.add(m.id);
       }
     }
     onAttendingChange(suggested);
-  }, [nearestSaturday, state.members, state.availability, onAttendingChange]);
+  }, [nearestRehearsalDate, state.members, state.availability, onAttendingChange]);
 
   // Recompute attendance when the user picks a new date.
   const handleDateChange = (next: string) => {
@@ -144,16 +158,8 @@ export default function RehearsalPage({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => {
-                const d = new Date();
-                const day = d.getDay(); // 0=Sun … 6=Sat
-                const forward = (6 - day + 7) % 7; // days until next Sat
-                const back = forward === 0 ? 0 : 7 - forward; // days since last Sat
-                const delta = back <= forward ? -back : forward; // pick nearest
-                d.setDate(d.getDate() + delta);
-                handleDateChange(toLocalDateString(d));
-              }}
-              title="跳到最近的周六"
+              onClick={() => handleDateChange(toLocalDateString(nearestWeekday(rehearsalDay)))}
+              title={`跳到最近的${rehearsalDayLabel(rehearsalDay)}`}
             >
               <CalendarClock className="mr-1 h-4 w-4" />
               下次排练
@@ -199,33 +205,57 @@ export default function RehearsalPage({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <BucketColumn
-                bucket="A"
-                title="完整阵容"
-                description="所有 part 都有正式分配的人到场"
-                songs={plan.A}
-                attendingIds={attendingIds}
-                onSelect={onSelectSong}
-              />
-              <BucketColumn
-                bucket="B"
-                title="替补阵容"
-                description="有 part 靠替补补位，但全覆盖了"
-                songs={plan.B}
-                attendingIds={attendingIds}
-                onSelect={onSelectSong}
-              />
-              <BucketColumn
-                bucket="C"
-                title="还差一点"
-                description="还缺 1-2 个 part 没人能补"
-                songs={plan.C}
-                attendingIds={attendingIds}
-                onSelect={onSelectSong}
-                whatIfHints={whatIfHints}
-              />
-            </div>
+            <>
+              <div className="flex items-center justify-end mb-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-zinc-500">
+                  显示已就绪
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={showReady}
+                    onClick={toggleShowReady}
+                    className={cn(
+                      'relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors',
+                      showReady ? 'bg-zinc-900' : 'bg-zinc-300',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform',
+                        showReady ? 'translate-x-4' : 'translate-x-0',
+                      )}
+                    />
+                  </button>
+                </label>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <BucketColumn
+                  bucket="A"
+                  title="完整阵容"
+                  description="所有 part 都有正式分配的人到场"
+                  songs={filterReady(plan.A)}
+                  attendingIds={attendingIds}
+                  onSelect={onSelectSong}
+                />
+                <BucketColumn
+                  bucket="B"
+                  title="替补阵容"
+                  description="有 part 靠替补补位，但全覆盖了"
+                  songs={filterReady(plan.B)}
+                  attendingIds={attendingIds}
+                  onSelect={onSelectSong}
+                />
+                <BucketColumn
+                  bucket="C"
+                  title="还差一点"
+                  description="还缺 1-2 个 part 没人能补"
+                  songs={filterReady(plan.C)}
+                  attendingIds={attendingIds}
+                  onSelect={onSelectSong}
+                  whatIfHints={whatIfHints}
+                />
+              </div>
+            </>
           )}
         </div>
       </div>
