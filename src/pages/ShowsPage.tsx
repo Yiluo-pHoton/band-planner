@@ -3,7 +3,7 @@ import { Calendar, Plus, Trash2, Pencil, Ticket } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
 import type { Show } from '@/types';
 import { cn } from '@/lib/utils';
-import { getRehearsalDay, countWeekdaysBetween } from '@/lib/rehearsalDay';
+import { countWeekdaysBetween, type WeekDay } from '@/lib/rehearsalDay';
 
 function toLocalDateString(d: Date): string {
   const y = d.getFullYear();
@@ -69,7 +69,7 @@ export default function ShowsPage({ onSelectShow }: ShowsPageProps) {
           <div className="space-y-3">
             {sorted.map((show) => {
               const days = daysUntil(show.date);
-              const rehearsals = countWeekdaysBetween(todayStr, show.date, getRehearsalDay());
+              const rehearsals = countWeekdaysBetween(todayStr, show.date, (state.rehearsalDay ?? 6) as WeekDay);
               const isPast = days < 0;
               const setlistCount = show.setlistSongIds.length;
               const capacityLabel = show.minSongs != null && show.maxSongs != null

@@ -14,7 +14,13 @@ import ShowDetailPage from '@/pages/ShowDetailPage';
 import WhoNeedsToComePage from '@/pages/WhoNeedsToComePage';
 
 export default function App() {
-  const [tab, setTab] = React.useState<TabKey>('songs');
+  const [tab, setTab] = React.useState<TabKey>(() => {
+    const saved = localStorage.getItem('band-planner:active-tab');
+    if (saved && ['songs','members','memberSongs','availability','rehearsal','history','shows','whoNeeds'].includes(saved)) {
+      return saved as TabKey;
+    }
+    return 'songs';
+  });
   const [selectedSongId, setSelectedSongId] = React.useState<string | null>(null);
   const [selectedMemberId, setSelectedMemberId] = React.useState<string | null>(null);
   const [selectedShowId, setSelectedShowId] = React.useState<string | null>(null);
@@ -26,6 +32,7 @@ export default function App() {
     setSelectedMemberId(null);
     setSelectedShowId(null);
     setTab(key);
+    localStorage.setItem('band-planner:active-tab', key);
   };
 
   const openSongDetail = (from: TabKey) => (id: string) => {

@@ -21,12 +21,10 @@ function instrumentToGroup(inst: Instrument): InstrumentGroup {
   return inst as InstrumentGroup;
 }
 
+/** Pick the primary group for a member using their first instrument. */
 function primaryGroupOf(instruments: Instrument[]): InstrumentGroup {
-  const groups = new Set(instruments.map(instrumentToGroup));
-  for (const g of GROUP_ORDER) {
-    if (groups.has(g)) return g;
-  }
-  return 'keys';
+  if (instruments.length === 0) return 'keys';
+  return instrumentToGroup(instruments[0]!);
 }
 
 interface MemberNeed {

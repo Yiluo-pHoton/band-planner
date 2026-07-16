@@ -4,7 +4,7 @@ import { useApp } from '@/store/AppContext';
 import { INSTRUMENTS } from '@/lib/instruments';
 import { SONG_STATUS_META } from '@/lib/songStatus';
 import { cn } from '@/lib/utils';
-import { getRehearsalDay, countWeekdaysBetween, collectWeekdaysBetween, rehearsalDayLabel } from '@/lib/rehearsalDay';
+import { countWeekdaysBetween, collectWeekdaysBetween, rehearsalDayLabel, type WeekDay } from '@/lib/rehearsalDay';
 import type { Assignment, Instrument, Member, Rehearsal, Show, Song } from '@/types';
 
 /* ---- helpers ---- */
@@ -113,7 +113,7 @@ export default function ShowDetailPage({ showId, onBack, onSelectSong }: ShowDet
   const todayStr = toLocalDateString(new Date());
   const days = daysUntil(show.date);
   // Count rehearsals: rehearsal-day occurrences between today and show date + any manually-added off-day rehearsals
-  const rDay = getRehearsalDay();
+  const rDay = (state.rehearsalDay ?? 6) as WeekDay;
   const rehearsalDayCount = countWeekdaysBetween(todayStr, show.date, rDay);
   const manualOffDay = state.rehearsals.filter((r) => {
     if (r.date <= todayStr || r.date > show.date) return false;
@@ -183,12 +183,10 @@ function instrumentToGroup(inst: Instrument): InstrumentGroup {
   return inst as InstrumentGroup;
 }
 
+/** Pick the primary group for a member using their first instrument. */
 function primaryGroupOf(instruments: Instrument[]): InstrumentGroup {
-  const groups = new Set(instruments.map(instrumentToGroup));
-  for (const g of GROUP_ORDER) {
-    if (groups.has(g)) return g;
-  }
-  return 'keys';
+  if (instruments.length === 0) return 'keys';
+  return instrumentToGroup(instruments[0]!);
 }
 
 function PerformerBar({
@@ -538,11 +536,12 @@ function RehearsalSchedule({
   onAddRehearsal: (r: Rehearsal) => void;
   onDeleteRehearsal: (id: string) => void;
 }) {
+  const { state: appState } = useApp();
   const [addingDate, setAddingDate] = React.useState('');
   const [expanded, setExpanded] = React.useState(false);
   const todayStr = toLocalDateString(new Date());
 
-  const rDay = getRehearsalDay();
+  const rDay = (appState.rehearsalDay ?? 6) as WeekDay;
   const rDayLabel = rehearsalDayLabel(rDay);
 
   // Auto rehearsal days between now and show

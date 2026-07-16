@@ -5,7 +5,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
 import { cn, toLocalDateString } from '@/lib/utils';
 import { applySeedAvailability } from '@/lib/seedAvailability';
-import { getRehearsalDay, setRehearsalDay, ALL_WEEKDAYS, type WeekDay } from '@/lib/rehearsalDay';
+import { ALL_WEEKDAYS, type WeekDay } from '@/lib/rehearsalDay';
 import type { Availability } from '@/types';
 
 type Brush = 'available' | 'unavailable' | 'tentative' | 'clear';
@@ -38,17 +38,16 @@ function addDays(d: Date, n: number): Date {
 }
 
 export default function AvailabilityPage() {
-  const { state, setAvailability } = useApp();
+  const { state, setAvailability, setRehearsalDay } = useApp();
+  const rDay = (state.rehearsalDay ?? 6) as WeekDay;
   const [brush, setBrush] = React.useState<Brush>('unavailable');
   const [weekOffset, setWeekOffset] = React.useState(0);
   const [painting, setPainting] = React.useState(false);
   const [seedConfirmOpen, setSeedConfirmOpen] = React.useState(false);
   const [seedReport, setSeedReport] = React.useState<string | null>(null);
-  const [rDay, setRDay] = React.useState<WeekDay>(getRehearsalDay);
 
   const handleRehearsalDayChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const v = Number(e.target.value) as WeekDay;
-    setRDay(v);
     setRehearsalDay(v);
   };
 

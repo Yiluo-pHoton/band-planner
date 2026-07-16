@@ -37,12 +37,18 @@ export function saveState(state: PersistedState): void {
   }
 }
 
-/** Write state to Firestore. Returns the timestamp used as write marker. */
+/** Write state to Firestore. */
 export function saveToFirestore(state: PersistedState, writeId: string): void {
-  const ref = doc(db, FIRESTORE_DOC);
-  setDoc(ref, { ...state, _writeId: writeId }).catch((e) => {
-    console.error('Failed to save to Firestore:', e);
-  });
+  try {
+    const ref = doc(db, FIRESTORE_DOC);
+    // JSON round-trip strips `undefined` values that Firestore rejects.
+    const clean = JSON.parse(JSON.stringify({ ...state, _writeId: writeId }));
+    setDoc(ref, clean).catch((e) => {
+      console.error('Failed to save to Firestore:', e);
+    });
+  } catch (e) {
+    console.error('Failed to save to Firestore (sync):', e);
+  }
 }
 
 /**

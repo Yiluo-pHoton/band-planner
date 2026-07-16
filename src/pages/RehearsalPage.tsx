@@ -14,7 +14,7 @@ import {
 } from '@/lib/rehearsalPlanner';
 import { Input } from '@/components/ui/input';
 import { cn, toLocalDateString } from '@/lib/utils';
-import { getRehearsalDay, nearestWeekday, rehearsalDayLabel } from '@/lib/rehearsalDay';
+import { nearestWeekday, rehearsalDayLabel, type WeekDay } from '@/lib/rehearsalDay';
 import type { Instrument, Song } from '@/types';
 
 // Short Chinese labels for the rehearsal page part rows.
@@ -57,7 +57,7 @@ export default function RehearsalPage({
   const filterReady = (songs: Song[]) =>
     showReady ? songs : songs.filter((s) => s.status !== 'ready');
 
-  const rehearsalDay = getRehearsalDay();
+  const rehearsalDay = (state.rehearsalDay ?? 6) as WeekDay;
 
   // Compute nearest rehearsal day for initial date.
   const nearestRehearsalDate = React.useMemo(

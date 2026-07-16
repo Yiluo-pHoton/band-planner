@@ -6,7 +6,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
 import { SONG_STATUSES, SONG_STATUS_META, isStatusAllowed } from '@/lib/songStatus';
-import { getRehearsalDay, nextRehearsalDates } from '@/lib/rehearsalDay';
+import { nextRehearsalDates, type WeekDay } from '@/lib/rehearsalDay';
 import { cn } from '@/lib/utils';
 import type { Assignment, Availability, Member, Song, SongStatus } from '@/types';
 
@@ -105,7 +105,7 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
   const [sort, setSort] = React.useState<{ key: SortKey; dir: SortDir } | null>(null);
   const [view, setViewRaw] = React.useState<ViewMode>(() => {
     const saved = localStorage.getItem('band-planner:songs-view');
-    return saved === 'cards' ? 'cards' : 'table';
+    return saved === 'table' ? 'table' : 'cards';
   });
   const setView = (v: ViewMode) => {
     setViewRaw(v);
@@ -148,7 +148,8 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
     return [...state.songs].sort(cmp);
   }, [state.songs, sort]);
 
-  const upcoming3 = React.useMemo(() => nextRehearsalDates(getRehearsalDay(), 3), []);
+  const rDay = (state.rehearsalDay ?? 6) as WeekDay;
+  const upcoming3 = React.useMemo(() => nextRehearsalDates(rDay, 3), [rDay]);
 
   const unavailableMap = React.useMemo(() => {
     const map = new Map<string, string[]>();

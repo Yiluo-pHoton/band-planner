@@ -95,4 +95,5 @@ export interface PersistedState {
   rehearsals: Rehearsal[];
   availability: Availability[];
   shows: Show[];
+  rehearsalDay?: number;       // 0=Sun .. 6=Sat; absent => 6 (Saturday)
 }

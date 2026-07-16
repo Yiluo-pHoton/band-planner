@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -59,6 +60,16 @@ export function MemberFormDialog({
         ...f,
         instruments: has ? f.instruments.filter((i) => i !== inst) : [...f.instruments, inst],
       };
+    });
+  };
+
+  const moveInstrument = (index: number, direction: -1 | 1) => {
+    setForm((f) => {
+      const next = [...f.instruments];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return f;
+      [next[index]!, next[target]!] = [next[target]!, next[index]!];
+      return { ...f, instruments: next };
     });
   };
 
@@ -135,6 +146,54 @@ export function MemberFormDialog({
                 );
               })}
             </div>
+
+            {form.instruments.length > 1 && (
+              <div className="mt-3">
+                <p className="text-[11px] text-zinc-400 mb-1.5">
+                  排列顺序（第一个 = 主要乐器）
+                </p>
+                <div className="space-y-1">
+                  {form.instruments.map((inst, i) => {
+                    const meta = INSTRUMENT_META[inst];
+                    return (
+                      <div
+                        key={inst}
+                        className={cn(
+                          'flex items-center gap-2 rounded-md border px-2 py-1',
+                          i === 0
+                            ? 'border-zinc-300 bg-zinc-50'
+                            : 'border-zinc-200 bg-white',
+                        )}
+                      >
+                        <span className={cn('rounded px-1 py-0.5 text-[10px] font-bold', meta.badge)}>
+                          {meta.abbrev}
+                        </span>
+                        <span className="flex-1 text-xs text-zinc-700">{meta.label}</span>
+                        {i === 0 && (
+                          <span className="text-[10px] text-zinc-400">主要</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => moveInstrument(i, -1)}
+                          disabled={i === 0}
+                          className="rounded p-0.5 text-zinc-400 hover:text-zinc-700 disabled:opacity-25 disabled:cursor-default"
+                        >
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveInstrument(i, 1)}
+                          disabled={i === form.instruments.length - 1}
+                          className="rounded p-0.5 text-zinc-400 hover:text-zinc-700 disabled:opacity-25 disabled:cursor-default"
+                        >
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {error && <p className="text-xs text-red-600">{error}</p>}

@@ -42,14 +42,10 @@ function instrumentToGroup(inst: Instrument): InstrumentGroup {
   return 'keys';
 }
 
-/** Pick the primary group for a member by scanning all their instruments
- *  and returning the one that appears earliest in GROUP_ORDER. */
+/** Pick the primary group for a member using their first instrument. */
 function primaryGroupOf(instruments: Instrument[]): InstrumentGroup {
-  const groups = new Set(instruments.map(instrumentToGroup));
-  for (const g of GROUP_ORDER) {
-    if (groups.has(g)) return g;
-  }
-  return 'keys';
+  if (instruments.length === 0) return 'keys';
+  return instrumentToGroup(instruments[0]!);
 }
 
 /* ------------------------------------------------------------------ */
