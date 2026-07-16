@@ -1,13 +1,14 @@
 import * as React from 'react';
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Columns3, List, Music, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Columns3, List, Music, Pencil, Plus, Trash2, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SongFormDialog } from '@/components/SongFormDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
 import { SONG_STATUSES, SONG_STATUS_META, isStatusAllowed } from '@/lib/songStatus';
+import { getRehearsalDay, nextRehearsalDates } from '@/lib/rehearsalDay';
 import { cn } from '@/lib/utils';
-import type { Assignment, Song, SongStatus } from '@/types';
+import type { Assignment, Availability, Member, Song, SongStatus } from '@/types';
 
 // A song is "fully assigned" iff every required part has at least one
 // non-emergency assignment (matching count for duplicates). Shelved songs
@@ -24,6 +25,68 @@ function unassignedCount(song: Song, assignments: Assignment[]): number {
     if (regular < required) missing += required - regular;
   }
   return missing;
+}
+
+/** Members assigned (non-emergency) to a song who are unavailable on ALL
+ *  of the next `count` rehearsal days. Returns member names for display. */
+function findUnavailableMembers(
+  songId: string,
+  assignments: Assignment[],
+  members: Member[],
+  availability: Availability[],
+  dates: string[],
+): string[] {
+  if (dates.length === 0) return [];
+  const songAssignments = assignments.filter((a) => a.songId === songId && !a.isEmergency);
+  const memberIds = [...new Set(songAssignments.map((a) => a.memberId))];
+  const result: string[] = [];
+  for (const mId of memberIds) {
+    const allUnavailable = dates.every((date) => {
+      const av = availability.find((a) => a.memberId === mId && a.date === date);
+      return av?.status === 'unavailable';
+    });
+    if (allUnavailable) {
+      const m = members.find((x) => x.id === mId);
+      if (m) result.push(m.name);
+    }
+  }
+  return result;
+}
+
+/** Check whether every unavailable member's parts are covered by an
+ *  available emergency (替补) assignee. Returns true when fully covered. */
+function checkBackupCoverage(
+  songId: string,
+  assignments: Assignment[],
+  availability: Availability[],
+  dates: string[],
+): boolean {
+  if (dates.length === 0) return false;
+  const regular = assignments.filter((a) => a.songId === songId && !a.isEmergency);
+  const memberIds = [...new Set(regular.map((a) => a.memberId))];
+  const unavailIds = memberIds.filter((mId) =>
+    dates.every((date) => {
+      const av = availability.find((x) => x.memberId === mId && x.date === date);
+      return av?.status === 'unavailable';
+    }),
+  );
+  if (unavailIds.length === 0) return true;
+  for (const mId of unavailIds) {
+    const parts = regular.filter((a) => a.memberId === mId);
+    for (const pa of parts) {
+      const backups = assignments.filter(
+        (a) => a.songId === songId && a.part === pa.part && a.isEmergency,
+      );
+      const ok = backups.some((b) =>
+        !dates.every((date) => {
+          const av = availability.find((x) => x.memberId === b.memberId && x.date === date);
+          return av?.status === 'unavailable';
+        }),
+      );
+      if (!ok) return false;
+    }
+  }
+  return true;
 }
 
 interface SongsPageProps {
@@ -85,12 +148,34 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
     return [...state.songs].sort(cmp);
   }, [state.songs, sort]);
 
+  const upcoming3 = React.useMemo(() => nextRehearsalDates(getRehearsalDay(), 3), []);
+
+  const unavailableMap = React.useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const song of state.songs) {
+      if (song.status === 'shelved') continue;
+      const names = findUnavailableMembers(
+        song.id, state.assignments, state.members, state.availability, upcoming3,
+      );
+      if (names.length > 0) map.set(song.id, names);
+    }
+    return map;
+  }, [state.songs, state.assignments, state.members, state.availability, upcoming3]);
+
+  const backupCoveredMap = React.useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const [songId] of unavailableMap) {
+      map.set(songId, checkBackupCoverage(songId, state.assignments, state.availability, upcoming3));
+    }
+    return map;
+  }, [unavailableMap, state.assignments, state.availability, upcoming3]);
+
   const totalCount = state.songs.length;
   const originalCount = state.songs.filter((s) => s.kind === 'original').length;
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
-      <div className={cn('mx-auto p-6', view === 'cards' ? 'max-w-7xl' : 'max-w-5xl')}>
+      <div className="mx-auto px-6 py-6">
         <div className="flex items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">歌曲</h1>
@@ -139,6 +224,8 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
             <KanbanBoard
               songs={state.songs}
               assignments={state.assignments}
+              unavailableMap={unavailableMap}
+              backupCoveredMap={backupCoveredMap}
               onSelect={onSelect}
               onEdit={openEdit}
               onDelete={setDeleteTarget}
@@ -158,6 +245,12 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
                 <tbody className="divide-y divide-zinc-100">
                   {songs.map((song) => {
                     const missing = unassignedCount(song, state.assignments);
+                    const unavailNames = unavailableMap.get(song.id);
+                    const hasWarning = missing > 0 || (unavailNames && unavailNames.length > 0);
+                    const backupCovered = backupCoveredMap.get(song.id) ?? false;
+                    const titleColor = !hasWarning ? 'text-zinc-900'
+                      : (missing === 0 && backupCovered) ? 'text-amber-600'
+                      : 'text-red-600';
                     return (
                       <tr
                         key={song.id}
@@ -169,8 +262,8 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
                       >
                         <td className="px-5 py-3.5">
                           <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-medium text-zinc-900">{song.title}</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={cn('font-medium', titleColor)}>{song.title}</span>
                               {song.kind === 'original' && (
                                 <span className="inline-flex items-center rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700">
                                   原创
@@ -178,11 +271,20 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
                               )}
                               {missing > 0 && (
                                 <span
-                                  className="inline-flex items-center gap-0.5 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700"
+                                  className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800"
                                   title={`还有 ${missing} 个 part 没有正式分配`}
                                 >
-                                  <AlertTriangle className="h-3 w-3" />
+                                  <AlertTriangle className="h-3.5 w-3.5" />
                                   缺 {missing}
+                                </span>
+                              )}
+                              {unavailNames && unavailNames.length > 0 && (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700"
+                                  title={`${unavailNames.join('、')} 连续 3 次排练不在`}
+                                >
+                                  <UserX className="h-3.5 w-3.5" />
+                                  {unavailNames.join('、')}
                                 </span>
                               )}
                             </div>
@@ -343,13 +445,15 @@ function sortByOrder(songs: Song[], order: string[]): Song[] {
 interface KanbanBoardProps {
   songs: Song[];
   assignments: Assignment[];
+  unavailableMap: Map<string, string[]>;
+  backupCoveredMap: Map<string, boolean>;
   onSelect?: (id: string) => void;
   onEdit: (song: Song) => void;
   onDelete: (song: Song) => void;
   onStatusChange: (song: Song, status: SongStatus) => void;
 }
 
-function KanbanBoard({ songs, assignments, onSelect, onEdit, onDelete, onStatusChange }: KanbanBoardProps) {
+function KanbanBoard({ songs, assignments, unavailableMap, backupCoveredMap, onSelect, onEdit, onDelete, onStatusChange }: KanbanBoardProps) {
   const [dragOver, setDragOver] = React.useState<SongStatus | null>(null);
   const [dragOverIdx, setDragOverIdx] = React.useState<number | null>(null);
   const [columnOrder, setColumnOrder] = React.useState<ColumnOrder>(loadColumnOrder);
@@ -418,7 +522,7 @@ function KanbanBoard({ songs, assignments, onSelect, onEdit, onDelete, onStatusC
         <div
           key={col.status}
           className={cn(
-            'flex w-56 shrink-0 flex-col rounded-xl border bg-white shadow-sm transition-colors',
+            'flex min-w-[13rem] flex-1 flex-col rounded-xl border bg-white shadow-sm transition-colors',
             dragOver === col.status ? 'border-zinc-400 ring-2 ring-zinc-200' : 'border-zinc-200',
           )}
           onDragOver={(e) => {
@@ -450,11 +554,15 @@ function KanbanBoard({ songs, assignments, onSelect, onEdit, onDelete, onStatusC
             ) : (
               col.songs.map((song, idx) => {
                 const missing = unassignedCount(song, assignments);
+                const unavailNames = unavailableMap.get(song.id);
+                const backupCovered = backupCoveredMap.get(song.id) ?? false;
                 return (
                   <KanbanCard
                     key={song.id}
                     song={song}
                     missing={missing}
+                    unavailNames={unavailNames}
+                    backupCovered={backupCovered}
                     isDropTarget={dragOver === col.status && dragOverIdx === idx}
                     onDragOver={() => { setDragOver(col.status); setDragOverIdx(idx); }}
                     onDrop={(e) => { e.stopPropagation(); handleDrop(col.status, e, idx); }}
@@ -475,6 +583,8 @@ function KanbanBoard({ songs, assignments, onSelect, onEdit, onDelete, onStatusC
 interface KanbanCardProps {
   song: Song;
   missing: number;
+  unavailNames?: string[];
+  backupCovered?: boolean;
   isDropTarget?: boolean;
   onDragOver?: () => void;
   onDrop?: (e: React.DragEvent) => void;
@@ -483,7 +593,7 @@ interface KanbanCardProps {
   onDelete: () => void;
 }
 
-function KanbanCard({ song, missing, isDropTarget, onDragOver, onDrop, onSelect, onEdit, onDelete }: KanbanCardProps) {
+function KanbanCard({ song, missing, unavailNames, backupCovered, isDropTarget, onDragOver, onDrop, onSelect, onEdit, onDelete }: KanbanCardProps) {
   const [isDragging, setIsDragging] = React.useState(false);
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -508,7 +618,12 @@ function KanbanCard({ song, missing, isDropTarget, onDragOver, onDrop, onSelect,
       )}
     >
       <div className="flex items-center gap-1.5">
-        <p className="min-w-0 flex-1 truncate text-[13px] font-medium leading-tight text-zinc-900">
+        <p className={cn(
+          'min-w-0 flex-1 truncate text-[13px] font-medium leading-tight',
+          !(missing > 0 || (unavailNames && unavailNames.length > 0))
+            ? 'text-zinc-900'
+            : (missing === 0 && backupCovered) ? 'text-amber-600' : 'text-red-600',
+        )}>
           {song.title}
         </p>
         {song.kind === 'original' && (
@@ -520,18 +635,31 @@ function KanbanCard({ song, missing, isDropTarget, onDragOver, onDrop, onSelect,
       {song.artist && (
         <p className="truncate text-[10px] leading-tight text-zinc-500">{song.artist}</p>
       )}
-      <div className="mt-1 flex items-center gap-1.5">
+      <div className="mt-1">
         <PartsRow song={song} />
-        {missing > 0 && (
-          <span
-            className="inline-flex shrink-0 items-center gap-0.5 rounded bg-amber-50 px-1 py-0 text-[9px] font-medium text-amber-700"
-            title={`还有 ${missing} 个 part 没有正式分配`}
-          >
-            <AlertTriangle className="h-2.5 w-2.5" />
-            {missing}
-          </span>
-        )}
       </div>
+      {(missing > 0 || (unavailNames && unavailNames.length > 0)) && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          {missing > 0 && (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800"
+              title={`还有 ${missing} 个 part 没有正式分配`}
+            >
+              <AlertTriangle className="h-3 w-3" />
+              缺{missing}
+            </span>
+          )}
+          {unavailNames && unavailNames.length > 0 && (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-red-300 bg-red-50 px-1.5 py-0.5 text-[11px] font-semibold text-red-700"
+              title={`${unavailNames.join('、')} 连续 3 次排练不在`}
+            >
+              <UserX className="h-3 w-3" />
+              {unavailNames.join('/')}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Hover actions */}
       <div

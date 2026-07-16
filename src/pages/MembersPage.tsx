@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Pencil, Plus, Trash2, Users, X } from 'lucide-react';
+import { Music, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MemberFormDialog } from '@/components/MemberFormDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -44,7 +44,7 @@ export default function MembersPage({ onSelect }: MembersPageProps = {}) {
   const addInstrumentToMember = (memberId: string, inst: Instrument) => {
     const m = state.members.find((x) => x.id === memberId);
     if (!m) return;
-    if (m.instruments.includes(inst)) return; // already on this board
+    if (m.instruments.includes(inst)) return;
     updateMember({ ...m, instruments: [...m.instruments, inst] });
   };
 
@@ -109,12 +109,7 @@ export default function MembersPage({ onSelect }: MembersPageProps = {}) {
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
       <div className="mx-auto max-w-6xl p-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">成员</h1>
-            <p className="text-sm text-zinc-500 mt-1">
-              把下面的成员卡片拖到对应的乐器看板上。同一个人可以拖到多个看板。
-            </p>
-          </div>
+          <h1 className="text-2xl font-semibold">成员</h1>
           <Button onClick={openCreate}>
             <Plus className="h-4 w-4" />
             添加成员
@@ -127,58 +122,92 @@ export default function MembersPage({ onSelect }: MembersPageProps = {}) {
           </div>
         ) : (
           <>
-            {/* Instrument boards */}
-            <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {INSTRUMENTS.map((inst) => {
-                const meta = INSTRUMENT_META[inst];
-                const here = members.filter((m) => m.instruments.includes(inst));
-                const isOver = dragOver === inst;
+            {/* Member cards */}
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {members.map((m) => {
+                const count = assignmentCount(m.id);
+                const roles = memberRoles(m);
                 return (
-                  <div
-                    key={inst}
-                    onDragOver={(e) => handleBoardDragOver(e, inst)}
-                    onDragLeave={() => setDragOver((cur) => (cur === inst ? null : cur))}
-                    onDrop={(e) => handleBoardDrop(e, inst)}
-                    className={cn(
-                      'rounded-lg border bg-white transition-colors',
-                      isOver ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-200',
-                    )}
-                  >
-                    <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2">
-                      <div className="flex items-center gap-2">
+                  <MemberCard
+                    key={m.id}
+                    member={m}
+                    songCount={count}
+                    roles={roles}
+                    onSelect={onSelect ? () => onSelect(m.id) : undefined}
+                    onEdit={() => openEdit(m)}
+                    onDelete={() => setDeleteTarget(m)}
+                    onDragStart={(e) => handleDragStart(e, m.id)}
+                  />
+                );
+              })}
+              <button
+                type="button"
+                onClick={openCreate}
+                className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-200 bg-white py-8 text-zinc-400 hover:border-zinc-300 hover:text-zinc-600 transition-colors"
+              >
+                <Plus className="h-5 w-5" />
+                <span className="text-xs font-medium">添加成员</span>
+              </button>
+            </div>
+
+            {/* Instrument boards */}
+            <div className="mt-8">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  乐器分配
+                </p>
+                <p className="text-xs text-zinc-400">拖动成员卡片到对应乐器</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+                {INSTRUMENTS.map((inst) => {
+                  const meta = INSTRUMENT_META[inst];
+                  const here = members.filter((m) => m.instruments.includes(inst));
+                  const isOver = dragOver === inst;
+                  return (
+                    <div
+                      key={inst}
+                      onDragOver={(e) => handleBoardDragOver(e, inst)}
+                      onDragLeave={() => setDragOver((cur) => (cur === inst ? null : cur))}
+                      onDrop={(e) => handleBoardDrop(e, inst)}
+                      className={cn(
+                        'rounded-lg border bg-white transition-colors',
+                        isOver ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-200',
+                      )}
+                    >
+                      <div className="flex items-center gap-1.5 border-b border-zinc-200 px-2.5 py-1.5">
                         <span
                           className={cn(
-                            'inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold',
+                            'inline-flex items-center rounded border px-1 py-0.5 text-[10px] font-semibold leading-none',
                             meta.badge,
                           )}
                         >
                           {meta.abbrev}
                         </span>
-                        <span className="text-sm font-medium text-zinc-900">{meta.label}</span>
+                        <span className="text-xs font-medium text-zinc-700">{meta.label}</span>
+                        <span className="ml-auto text-[10px] text-zinc-400">{here.length}</span>
                       </div>
-                      <span className="text-xs text-zinc-400">{here.length}</span>
+                      <div className="min-h-[56px] p-1.5">
+                        {here.length === 0 ? (
+                          <p className="py-3 text-center text-[10px] text-zinc-300">
+                            拖到这里
+                          </p>
+                        ) : (
+                          <div className="flex flex-col gap-1">
+                            {here.map((m) => (
+                              <BoardChip
+                                key={m.id}
+                                member={m}
+                                onRemove={() => removeInstrumentFromMember(m.id, inst)}
+                                onDragStart={(e) => handleDragStart(e, m.id)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="min-h-[80px] p-2">
-                      {here.length === 0 ? (
-                        <p className="px-2 py-4 text-center text-xs text-zinc-400">
-                          拖成员到这里
-                        </p>
-                      ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {here.map((m) => (
-                            <BoardChip
-                              key={m.id}
-                              member={m}
-                              onRemove={() => removeInstrumentFromMember(m.id, inst)}
-                              onDragStart={(e) => handleDragStart(e, m.id)}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
 
             {/* Role boards */}
@@ -202,27 +231,25 @@ export default function MembersPage({ onSelect }: MembersPageProps = {}) {
                         isOver ? 'border-zinc-900 bg-zinc-50' : 'border-zinc-200',
                       )}
                     >
-                      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={cn(
-                              'inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold',
-                              meta.badge,
-                            )}
-                          >
-                            {meta.abbrev}
-                          </span>
-                          <span className="text-sm font-medium text-zinc-900">{meta.label}</span>
-                        </div>
-                        <span className="text-xs text-zinc-400">{here.length}</span>
+                      <div className="flex items-center gap-1.5 border-b border-zinc-200 px-2.5 py-1.5">
+                        <span
+                          className={cn(
+                            'inline-flex items-center rounded border px-1 py-0.5 text-[10px] font-semibold leading-none',
+                            meta.badge,
+                          )}
+                        >
+                          {meta.abbrev}
+                        </span>
+                        <span className="text-xs font-medium text-zinc-700">{meta.label}</span>
+                        <span className="ml-auto text-[10px] text-zinc-400">{here.length}</span>
                       </div>
-                      <div className="min-h-[80px] p-2">
+                      <div className="min-h-[56px] p-1.5">
                         {here.length === 0 ? (
-                          <p className="px-2 py-4 text-center text-xs text-zinc-400">
-                            拖成员到这里
+                          <p className="py-3 text-center text-[10px] text-zinc-300">
+                            拖到这里
                           </p>
                         ) : (
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-col gap-1">
                             {here.map((m) => (
                               <BoardChip
                                 key={m.id}
@@ -237,38 +264,6 @@ export default function MembersPage({ onSelect }: MembersPageProps = {}) {
                     </div>
                   );
                 })}
-              </div>
-            </div>
-
-            {/* Member pool */}
-            <div className="mt-6">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  全部成员 ({members.length})
-                </p>
-                <p className="text-xs text-zinc-400">点击编辑 · 拖到上方分配乐器</p>
-              </div>
-              <div className="rounded-lg border border-zinc-200 bg-white p-3">
-                <div className="flex flex-wrap gap-2">
-                  {members.map((m) => (
-                    <PoolCard
-                      key={m.id}
-                      member={m}
-                      onSelect={onSelect ? () => onSelect(m.id) : undefined}
-                      onEdit={() => openEdit(m)}
-                      onDelete={() => setDeleteTarget(m)}
-                      onDragStart={(e) => handleDragStart(e, m.id)}
-                    />
-                  ))}
-                  <button
-                    type="button"
-                    onClick={openCreate}
-                    className="flex items-center gap-1 rounded-md border border-dashed border-zinc-300 px-3 py-2 text-xs font-medium text-zinc-500 hover:border-zinc-400 hover:text-zinc-900"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    添加成员
-                  </button>
-                </div>
               </div>
             </div>
           </>
@@ -301,6 +296,98 @@ export default function MembersPage({ onSelect }: MembersPageProps = {}) {
   );
 }
 
+/* ── Member card (primary view) ─────────────────────────────── */
+
+interface MemberCardProps {
+  member: Member;
+  songCount: number;
+  roles: Role[];
+  onSelect?: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onDragStart: (e: React.DragEvent) => void;
+}
+
+function MemberCard({ member, songCount, roles, onSelect, onEdit, onDelete, onDragStart }: MemberCardProps) {
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onClick={onSelect}
+      className="group relative rounded-lg border border-zinc-200 bg-white p-4 shadow-sm hover:border-zinc-300 hover:shadow transition-all cursor-grab active:cursor-grabbing"
+    >
+      {/* Actions */}
+      <div className="absolute right-2 top-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onEdit(); }}
+          className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-red-600"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+
+      {/* Name */}
+      <p className="text-base font-medium text-zinc-900 pr-12">{member.name}</p>
+
+      {/* Instruments */}
+      {member.instruments.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {member.instruments.map((inst) => {
+            const meta = INSTRUMENT_META[inst];
+            return (
+              <span
+                key={inst}
+                className={cn(
+                  'inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none',
+                  meta.badge,
+                )}
+              >
+                {meta.label}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Roles */}
+      {roles.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {roles.map((role) => {
+            const meta = ROLE_META[role];
+            return (
+              <span
+                key={role}
+                className={cn(
+                  'inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium leading-none',
+                  meta.badge,
+                )}
+              >
+                {meta.label}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Song count */}
+      <div className="mt-3 flex items-center gap-1 text-xs text-zinc-400">
+        <Music className="h-3 w-3" />
+        <span>{songCount} 首歌</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Board chip (inside instrument / role boards) ───────────── */
+
 interface BoardChipProps {
   member: Member;
   onRemove: () => void;
@@ -312,71 +399,29 @@ function BoardChip({ member, onRemove, onDragStart }: BoardChipProps) {
     <div
       draggable
       onDragStart={onDragStart}
-      className="group flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-800 shadow-sm hover:border-zinc-300 cursor-grab active:cursor-grabbing"
+      className="group flex items-center justify-between rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-800 hover:border-zinc-300 cursor-grab active:cursor-grabbing"
     >
       <span>{member.name}</span>
       <button
         type="button"
         onClick={onRemove}
-        className="ml-0.5 flex h-4 w-4 items-center justify-center rounded text-zinc-400 opacity-0 hover:bg-zinc-100 hover:text-zinc-700 group-hover:opacity-100"
-        title="从这个乐器移除"
+        className="ml-1 flex h-3.5 w-3.5 items-center justify-center rounded text-zinc-400 opacity-0 hover:text-zinc-700 group-hover:opacity-100"
+        title="移除"
       >
-        <X className="h-3 w-3" />
+        <X className="h-2.5 w-2.5" />
       </button>
     </div>
   );
 }
 
-interface PoolCardProps {
-  member: Member;
-  onSelect?: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onDragStart: (e: React.DragEvent) => void;
-}
-
-function PoolCard({ member, onSelect, onEdit, onDelete, onDragStart }: PoolCardProps) {
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onClick={onSelect}
-      className="group relative flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm hover:border-zinc-300 cursor-grab active:cursor-grabbing"
-    >
-      <span className="font-medium text-zinc-900">{member.name}</span>
-      <span className="text-xs text-zinc-400">· {member.instruments.length}</span>
-      <div className="ml-1 flex opacity-0 group-hover:opacity-100">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit();
-          }}
-          className="flex h-5 w-5 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-        >
-          <Pencil className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="flex h-5 w-5 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-red-600"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
-      </div>
-    </div>
-  );
-}
+/* ── Empty state ────────────────────────────────────────────── */
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-200 bg-white py-16 text-center">
       <Users className="h-10 w-10 text-zinc-300 mb-3" />
       <p className="text-sm font-medium text-zinc-900">还没有成员</p>
-      <p className="text-xs text-zinc-500 mt-1 mb-4">先添加成员，再把卡片拖到乐器看板</p>
+      <p className="text-xs text-zinc-500 mt-1 mb-4">把乐队成员加进来才能开始排歌</p>
       <Button onClick={onAdd}>
         <Plus className="h-4 w-4" />
         添加第一个成员

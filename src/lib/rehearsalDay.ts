@@ -57,6 +57,20 @@ export function countWeekdaysBetween(from: string, to: string, day: WeekDay): nu
   return count;
 }
 
+export function nextRehearsalDates(day: WeekDay, count: number): string[] {
+  const d = new Date();
+  while (d.getDay() !== day) d.setDate(d.getDate() + 1);
+  const result: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    result.push(`${y}-${m}-${dd}`);
+    d.setDate(d.getDate() + 7);
+  }
+  return result;
+}
+
 export function collectWeekdaysBetween(from: string, to: string, day: WeekDay): string[] {
   const start = new Date(from + 'T00:00:00');
   const end = new Date(to + 'T00:00:00');

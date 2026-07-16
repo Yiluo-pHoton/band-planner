@@ -64,7 +64,7 @@ export function Sidebar({ active, onChange, onDataImported }: SidebarProps) {
         {/* Collapsed: just a music icon */}
         <p className="text-center text-base font-bold text-zinc-900 lg:hidden">♪</p>
       </div>
-      <nav className="flex-1 px-1.5 lg:px-2">
+      <nav className="flex-1 overflow-y-auto px-1.5 lg:px-2">
         {NAV.map((item) => {
           const Icon = item.icon;
           const isActive = item.key === active;
@@ -86,29 +86,28 @@ export function Sidebar({ active, onChange, onDataImported }: SidebarProps) {
             </button>
           );
         })}
+
+        <div className="my-2 border-t border-zinc-100" />
+
+        <button
+          type="button"
+          onClick={handleExport}
+          title="导出数据"
+          className="flex w-full items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900 lg:justify-start lg:px-3"
+        >
+          <Download className="h-4 w-4 shrink-0" />
+          <span className="hidden lg:inline">导出数据</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleImport}
+          title="导入数据"
+          className="flex w-full items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900 lg:justify-start lg:px-3"
+        >
+          <Upload className="h-4 w-4 shrink-0" />
+          <span className="hidden lg:inline">导入数据</span>
+        </button>
       </nav>
-      <div className="border-t border-zinc-200 px-1.5 py-3 lg:px-2">
-        <div className="flex items-center justify-center gap-1 lg:justify-start lg:gap-2">
-          <button
-            type="button"
-            onClick={handleExport}
-            title="导出数据"
-            className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900 lg:px-3"
-          >
-            <Download className="h-4 w-4 shrink-0" />
-            <span className="hidden lg:inline">导出数据</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleImport}
-            title="导入数据"
-            className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900 lg:px-3"
-          >
-            <Upload className="h-4 w-4 shrink-0" />
-            <span className="hidden lg:inline">导入数据</span>
-          </button>
-        </div>
-      </div>
     </aside>
   );
 }
