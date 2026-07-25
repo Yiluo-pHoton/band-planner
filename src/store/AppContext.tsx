@@ -22,7 +22,7 @@ type Action =
   | { type: 'shows/add'; show: Show }
   | { type: 'shows/update'; show: Show }
   | { type: 'shows/delete'; id: string }
-  | { type: 'settings/rehearsalDay'; day: number }
+  | { type: 'settings/rehearsalDays'; days: number[] }
   | { type: 'sync'; state: PersistedState };
 
 function reducer(state: PersistedState, action: Action): PersistedState {
@@ -166,8 +166,8 @@ function reducer(state: PersistedState, action: Action): PersistedState {
     case 'shows/delete':
       return { ...state, shows: state.shows.filter((sh) => sh.id !== action.id) };
 
-    case 'settings/rehearsalDay':
-      return { ...state, rehearsalDay: action.day };
+    case 'settings/rehearsalDays':
+      return { ...state, rehearsalDays: action.days };
 
     case 'sync':
       return action.state;
@@ -197,7 +197,7 @@ interface AppContextValue {
   addShow: (show: Show) => void;
   updateShow: (show: Show) => void;
   deleteShow: (id: string) => void;
-  setRehearsalDay: (day: number) => void;
+  setRehearsalDays: (days: number[]) => void;
 }
 
 const AppContext = React.createContext<AppContextValue | null>(null);
@@ -270,7 +270,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addShow: (show) => dispatch({ type: 'shows/add', show }),
       updateShow: (show) => dispatch({ type: 'shows/update', show }),
       deleteShow: (id) => dispatch({ type: 'shows/delete', id }),
-      setRehearsalDay: (day) => dispatch({ type: 'settings/rehearsalDay', day }),
+      setRehearsalDays: (days) => dispatch({ type: 'settings/rehearsalDays', days }),
     }),
     [state],
   );

@@ -52,6 +52,15 @@ export const migrations: Migration[] = [
     schemaVersion: 5,
     shows: data?.shows ?? [],
   }),
+  // index 5: v5 -> v6. rehearsalDay (single) -> rehearsalDays (array).
+  (data) => {
+    const { rehearsalDay, ...rest } = data;
+    const days: number[] =
+      Array.isArray(data.rehearsalDays) ? data.rehearsalDays
+      : rehearsalDay != null ? [rehearsalDay]
+      : [];
+    return { ...rest, schemaVersion: 6, rehearsalDays: days };
+  },
 ];
 
 export function migrate(raw: any): PersistedState {

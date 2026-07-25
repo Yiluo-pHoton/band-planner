@@ -6,7 +6,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
 import { SONG_STATUSES, SONG_STATUS_META, isStatusAllowed } from '@/lib/songStatus';
-import { nextRehearsalDates, type WeekDay } from '@/lib/rehearsalDay';
+import { nextRehearsalDatesMulti, type WeekDay } from '@/lib/rehearsalDay';
 import { cn } from '@/lib/utils';
 import type { Assignment, Availability, Member, Song, SongStatus } from '@/types';
 
@@ -148,8 +148,8 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
     return [...state.songs].sort(cmp);
   }, [state.songs, sort]);
 
-  const rDay = (state.rehearsalDay ?? 6) as WeekDay;
-  const upcoming3 = React.useMemo(() => nextRehearsalDates(rDay, 3), [rDay]);
+  const rDays: WeekDay[] = (state.rehearsalDays ?? [6]) as WeekDay[];
+  const upcoming3 = React.useMemo(() => nextRehearsalDatesMulti(rDays, 3), [rDays]);
 
   const unavailableMap = React.useMemo(() => {
     const map = new Map<string, string[]>();

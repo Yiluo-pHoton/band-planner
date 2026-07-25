@@ -4,7 +4,7 @@ import { useApp } from '@/store/AppContext';
 import { INSTRUMENTS } from '@/lib/instruments';
 import { SONG_STATUS_META } from '@/lib/songStatus';
 import { cn } from '@/lib/utils';
-import { countWeekdaysBetween, collectWeekdaysBetween, rehearsalDayLabel, type WeekDay } from '@/lib/rehearsalDay';
+import { countWeekdaysBetweenMulti, collectWeekdaysBetweenMulti, rehearsalDayLabel, type WeekDay } from '@/lib/rehearsalDay';
 import type { Assignment, Instrument, Member, Rehearsal, Show, Song } from '@/types';
 
 /* ---- helpers ---- */
@@ -113,12 +113,13 @@ export default function ShowDetailPage({ showId, onBack, onSelectSong }: ShowDet
   const todayStr = toLocalDateString(new Date());
   const days = daysUntil(show.date);
   // Count rehearsals: rehearsal-day occurrences between today and show date + any manually-added off-day rehearsals
-  const rDay = (state.rehearsalDay ?? 6) as WeekDay;
-  const rehearsalDayCount = countWeekdaysBetween(todayStr, show.date, rDay);
+  const rDays: WeekDay[] = (state.rehearsalDays ?? [6]) as WeekDay[];
+  const rDaySet = new Set<number>(rDays);
+  const rehearsalDayCount = countWeekdaysBetweenMulti(todayStr, show.date, rDays);
   const manualOffDay = state.rehearsals.filter((r) => {
     if (r.date <= todayStr || r.date > show.date) return false;
     const d = new Date(r.date + 'T00:00:00');
-    return d.getDay() !== rDay;
+    return !rDaySet.has(d.getDay());
   }).length;
   const rehearsals = rehearsalDayCount + manualOffDay;
 
@@ -302,7 +303,7 @@ function CandidatePool({
                 key={song.id}
                 draggable={!inSetlist}
                 onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = 'copy';
+                  e.dataTransfer.effectAllowed = 'move';
                   e.dataTransfer.setData('application/x-band-song-id', song.id);
                 }}
                 className={cn(
@@ -541,13 +542,12 @@ function RehearsalSchedule({
   const [expanded, setExpanded] = React.useState(false);
   const todayStr = toLocalDateString(new Date());
 
-  const rDay = (appState.rehearsalDay ?? 6) as WeekDay;
-  const rDayLabel = rehearsalDayLabel(rDay);
+  const rDays: WeekDay[] = (appState.rehearsalDays ?? [6]) as WeekDay[];
 
   // Auto rehearsal days between now and show
   const rehearsalDays = React.useMemo(
-    () => new Set(collectWeekdaysBetween(todayStr, showDate, rDay)),
-    [todayStr, showDate, rDay],
+    () => new Set(collectWeekdaysBetweenMulti(todayStr, showDate, rDays)),
+    [todayStr, showDate, rDays],
   );
 
   // Existing rehearsal dates from store
@@ -611,7 +611,7 @@ function RehearsalSchedule({
                   )}
                 >
                   {date.slice(5)}
-                  {isRehearsalDay && <span className="text-zinc-400">{rDayLabel.slice(1)}</span>}
+                  {isRehearsalDay && <span className="text-zinc-400">{rehearsalDayLabel(new Date(date + 'T00:00:00').getDay() as WeekDay).slice(1)}</span>}
                   {isManual && (
                     <button
                       type="button"

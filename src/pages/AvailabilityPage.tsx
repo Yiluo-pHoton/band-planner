@@ -1,12 +1,12 @@
 import * as React from 'react';
-import { CalendarX, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { ArrowDownUp, CalendarX, ChevronLeft, ChevronRight, Download, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
 import { cn, toLocalDateString } from '@/lib/utils';
 import { applySeedAvailability } from '@/lib/seedAvailability';
 import { ALL_WEEKDAYS, type WeekDay } from '@/lib/rehearsalDay';
-import type { Availability } from '@/types';
+import type { Availability, AvailabilityStatus, Member } from '@/types';
 
 type Brush = 'available' | 'unavailable' | 'tentative' | 'clear';
 type CellStatus = Availability['status'] | null;
@@ -38,17 +38,20 @@ function addDays(d: Date, n: number): Date {
 }
 
 export default function AvailabilityPage() {
-  const { state, setAvailability, setRehearsalDay } = useApp();
-  const rDay = (state.rehearsalDay ?? 6) as WeekDay;
+  const { state, setAvailability, setRehearsalDays, updateMember } = useApp();
+  const rDays: WeekDay[] = (state.rehearsalDays ?? [6]) as WeekDay[];
+  const rDaySet = React.useMemo(() => new Set(rDays), [rDays]);
   const [brush, setBrush] = React.useState<Brush>('unavailable');
   const [weekOffset, setWeekOffset] = React.useState(0);
   const [painting, setPainting] = React.useState(false);
   const [seedConfirmOpen, setSeedConfirmOpen] = React.useState(false);
   const [seedReport, setSeedReport] = React.useState<string | null>(null);
 
-  const handleRehearsalDayChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const v = Number(e.target.value) as WeekDay;
-    setRehearsalDay(v);
+  const toggleRehearsalDay = (day: WeekDay) => {
+    const next = rDaySet.has(day)
+      ? rDays.filter((d) => d !== day)
+      : [...rDays, day];
+    setRehearsalDays(next);
   };
 
   // End paint on global mouseup so dragging out of the grid still ends cleanly.
@@ -91,23 +94,31 @@ export default function AvailabilityPage() {
 
   const today = toLocalDateString(new Date());
 
-  // The next rehearsal day of the current week (containing today).
-  const thisRehearsalDay = React.useMemo(() => {
-    const s = startOfWeek(new Date()); // Monday
-    const offset = rDay === 0 ? 6 : rDay - 1; // Monday=0 offset
-    return toLocalDateString(addDays(s, offset));
-  }, [rDay]);
+  // This week's rehearsal day dates (for sorting).
+  const thisWeekRehearsalDates = React.useMemo(() => {
+    const s = startOfWeek(new Date());
+    return rDays.map((d) => {
+      const offset = d === 0 ? 6 : d - 1;
+      return toLocalDateString(addDays(s, offset));
+    });
+  }, [rDays]);
 
-  // Sort members by rehearsal-day status: available/blank (0) → tentative (1) → unavailable (2).
-  const members = React.useMemo(() => {
+  // Members list: default order from state, only sorted on button click.
+  const [sortedMembers, setSortedMembers] = React.useState<Member[] | null>(null);
+  const members = sortedMembers ?? state.members;
+
+  const sortByRehearsalDay = () => {
     const rank = (memberId: string): number => {
-      const st = lookup.get(`${memberId}|${thisRehearsalDay}`);
-      if (st === 'unavailable') return 2;
-      if (st === 'tentative') return 1;
-      return 0; // 'available' or null
+      let worst = 0;
+      for (const rd of thisWeekRehearsalDates) {
+        const st = lookup.get(`${memberId}|${rd}`);
+        if (st === 'unavailable') worst = Math.max(worst, 2);
+        else if (st === 'tentative') worst = Math.max(worst, 1);
+      }
+      return worst;
     };
-    return [...state.members].sort((a, b) => rank(a.id) - rank(b.id));
-  }, [state.members, lookup, thisRehearsalDay]);
+    setSortedMembers([...state.members].sort((a, b) => rank(a.id) - rank(b.id)));
+  };
 
   // Date columns where every member is non-unavailable → "everyone can come".
   const everyoneDates = React.useMemo(() => {
@@ -136,16 +147,28 @@ export default function AvailabilityPage() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-zinc-500">排练日</span>
-              <select
-                value={rDay}
-                onChange={handleRehearsalDayChange}
-                className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-900"
-              >
+              <div className="flex">
                 {ALL_WEEKDAYS.map((wd) => (
-                  <option key={wd.value} value={wd.value}>{wd.label}</option>
+                  <button
+                    key={wd.value}
+                    type="button"
+                    onClick={() => toggleRehearsalDay(wd.value)}
+                    className={cn(
+                      'border px-2 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md -ml-px first:ml-0',
+                      rDaySet.has(wd.value)
+                        ? 'border-zinc-900 bg-zinc-900 text-white z-10 relative'
+                        : 'border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50',
+                    )}
+                  >
+                    {wd.label.replace('周', '')}
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
+            <Button variant="secondary" onClick={sortByRehearsalDay}>
+              <ArrowDownUp className="mr-1 h-4 w-4" />
+              排序
+            </Button>
             <Button variant="secondary" onClick={() => setSeedConfirmOpen(true)}>
               <Download className="mr-1 h-4 w-4" />
               导入示例数据
@@ -293,6 +316,15 @@ export default function AvailabilityPage() {
             <p className="mt-3 text-xs text-zinc-500">
               提示：按住鼠标拖动可批量绘制；空白格子代表「默认可用」。
             </p>
+
+            {/* Weekly defaults */}
+            <WeeklyDefaultsPanel
+              members={state.members}
+              dates={dates}
+              brush={brush}
+              onUpdateMember={updateMember}
+              onSetAvailability={setAvailability}
+            />
           </>
         )}
       </div>
@@ -315,6 +347,144 @@ export default function AvailabilityPage() {
           setSeedReport(parts.join(' · '));
         }}
       />
+    </div>
+  );
+}
+
+/* ---------- Weekly defaults panel ---------- */
+
+const STATUS_STYLE: Record<AvailabilityStatus, string> = {
+  unavailable: 'bg-red-500 text-white',
+  available: 'bg-emerald-400 text-white',
+  tentative: 'bg-amber-400 text-white',
+};
+
+// Day labels in Mon-Sun order for display
+const WEEKDAY_ORDER: { value: WeekDay; short: string }[] = [
+  { value: 1, short: '一' },
+  { value: 2, short: '二' },
+  { value: 3, short: '三' },
+  { value: 4, short: '四' },
+  { value: 5, short: '五' },
+  { value: 6, short: '六' },
+  { value: 0, short: '日' },
+];
+
+function WeeklyDefaultsPanel({
+  members,
+  dates,
+  brush,
+  onUpdateMember,
+  onSetAvailability,
+}: {
+  members: Member[];
+  dates: Date[];
+  brush: Brush;
+  onUpdateMember: (m: Member) => void;
+  onSetAvailability: (memberId: string, date: string, status: Availability['status'] | null) => void;
+}) {
+  const [applyReport, setApplyReport] = React.useState<string | null>(null);
+  const [painting, setPainting] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!painting) return;
+    const onUp = () => setPainting(false);
+    window.addEventListener('mouseup', onUp);
+    return () => window.removeEventListener('mouseup', onUp);
+  }, [painting]);
+
+  const getDefault = (member: Member, day: WeekDay): AvailabilityStatus => {
+    return member.weeklyDefaults?.[String(day)] as AvailabilityStatus | undefined ?? 'unavailable';
+  };
+
+  const paintCell = (member: Member, day: WeekDay) => {
+    const target: AvailabilityStatus = brush === 'clear' ? 'unavailable' : brush;
+    const cur = getDefault(member, day);
+    if (cur === target) return;
+    const updated = { ...member.weeklyDefaults, [String(day)]: target };
+    onUpdateMember({ ...member, weeklyDefaults: updated });
+  };
+
+  const applyToFuture = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const futureDates = dates.filter((d) => d >= today);
+    let count = 0;
+    for (const m of members) {
+      for (const d of futureDates) {
+        const day = d.getDay() as WeekDay;
+        const status = getDefault(m, day);
+        onSetAvailability(m.id, toLocalDateString(d), status);
+        count++;
+      }
+    }
+    setApplyReport(`已应用 ${count} 条到可见日期范围`);
+  };
+
+  if (members.length === 0) return null;
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-900">每周常规 Availability</h2>
+          <p className="text-[11px] text-zinc-500 mt-0.5">
+            点击或拖动设置状态（红=来不了 / 绿=能来 / 黄=不稳定），然后点"应用"覆盖到上方表格
+          </p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={applyToFuture}>
+          <RotateCcw className="mr-1 h-3.5 w-3.5" />
+          应用到可见日期
+        </Button>
+      </div>
+      {applyReport && (
+        <p className="mb-2 text-xs text-zinc-600">{applyReport}</p>
+      )}
+      <div
+        className="inline-block rounded-lg border border-zinc-200 bg-white select-none"
+        onMouseLeave={() => setPainting(false)}
+      >
+        <table className="border-collapse text-xs">
+          <thead>
+            <tr>
+              <th className="bg-zinc-50 px-3 py-2 text-left font-medium text-zinc-500 border-b border-zinc-200">
+                成员
+              </th>
+              {WEEKDAY_ORDER.map((wd) => (
+                <th key={wd.value} className="px-0 py-2 text-center font-medium text-zinc-500 border-b border-zinc-200 w-9">
+                  {wd.short}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {members.map((m) => (
+              <tr key={m.id}>
+                <td className="bg-white px-3 py-1 font-medium text-zinc-900 border-b border-zinc-100 whitespace-nowrap">
+                  {m.name}
+                </td>
+                {WEEKDAY_ORDER.map((wd) => {
+                  const status = getDefault(m, wd.value);
+                  return (
+                    <td key={wd.value} className="p-0 border-b border-zinc-100">
+                      <button
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); setPainting(true); paintCell(m, wd.value); }}
+                        onMouseEnter={() => { if (painting) paintCell(m, wd.value); }}
+                        className={cn(
+                          'block h-6 w-full transition-colors',
+                          STATUS_STYLE[status],
+                        )}
+                        title={`${m.name} · 周${wd.short} · ${status}`}
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

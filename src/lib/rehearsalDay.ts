@@ -43,6 +43,42 @@ export function nearestWeekday(day: WeekDay): Date {
   return d;
 }
 
+/** Next occurrence of `day` that is today or in the future (inclusive). */
+export function nextWeekday(day: WeekDay): Date {
+  const d = new Date();
+  const cur = d.getDay();
+  const forward = (day - cur + 7) % 7; // 0 if today is that day
+  d.setDate(d.getDate() + (forward === 0 ? 0 : forward));
+  return d;
+}
+
+/** Earliest upcoming occurrence among multiple weekdays (today inclusive). */
+export function nextOfWeekdays(days: WeekDay[]): Date {
+  if (days.length === 0) return nextWeekday(6);
+  let best = nextWeekday(days[0]!);
+  for (let i = 1; i < days.length; i++) {
+    const candidate = nextWeekday(days[i]!);
+    if (candidate < best) best = candidate;
+  }
+  return best;
+}
+
+/** Count how many times ANY of `days` falls between from and to (inclusive). */
+export function countWeekdaysBetweenMulti(from: string, to: string, days: WeekDay[]): number {
+  let total = 0;
+  for (const d of days) total += countWeekdaysBetween(from, to, d);
+  return total;
+}
+
+/** Collect all dates matching ANY of `days` between from and to (inclusive, sorted). */
+export function collectWeekdaysBetweenMulti(from: string, to: string, days: WeekDay[]): string[] {
+  const set = new Set<string>();
+  for (const d of days) {
+    for (const date of collectWeekdaysBetween(from, to, d)) set.add(date);
+  }
+  return [...set].sort();
+}
+
 export function countWeekdaysBetween(from: string, to: string, day: WeekDay): number {
   const start = new Date(from + 'T00:00:00');
   const end = new Date(to + 'T00:00:00');
@@ -69,6 +105,16 @@ export function nextRehearsalDates(day: WeekDay, count: number): string[] {
     d.setDate(d.getDate() + 7);
   }
   return result;
+}
+
+/** Next `count` upcoming dates across multiple rehearsal days (sorted chronologically). */
+export function nextRehearsalDatesMulti(days: WeekDay[], count: number): string[] {
+  if (days.length === 0) return nextRehearsalDates(6, count);
+  // Generate enough from each day, merge, sort, take first `count`.
+  const all: string[] = [];
+  for (const d of days) all.push(...nextRehearsalDates(d, count));
+  all.sort();
+  return [...new Set(all)].slice(0, count);
 }
 
 export function collectWeekdaysBetween(from: string, to: string, day: WeekDay): string[] {

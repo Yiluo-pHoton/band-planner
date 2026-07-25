@@ -13,14 +13,33 @@ import ShowsPage from '@/pages/ShowsPage';
 import ShowDetailPage from '@/pages/ShowDetailPage';
 import WhoNeedsToComePage from '@/pages/WhoNeedsToComePage';
 
+const VALID_TABS: TabKey[] = ['songs','members','memberSongs','availability','rehearsal','history','shows','whoNeeds'];
+
+function tabFromHash(): TabKey | null {
+  const h = window.location.hash.replace('#', '');
+  return VALID_TABS.includes(h as TabKey) ? (h as TabKey) : null;
+}
+
 export default function App() {
   const [tab, setTab] = React.useState<TabKey>(() => {
+    const fromHash = tabFromHash();
+    if (fromHash) return fromHash;
     const saved = localStorage.getItem('band-planner:active-tab');
-    if (saved && ['songs','members','memberSongs','availability','rehearsal','history','shows','whoNeeds'].includes(saved)) {
+    if (saved && VALID_TABS.includes(saved as TabKey)) {
       return saved as TabKey;
     }
     return 'songs';
   });
+
+  // Sync browser back/forward with tab state.
+  React.useEffect(() => {
+    const onHashChange = () => {
+      const t = tabFromHash();
+      if (t) setTab(t);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
   const [selectedSongId, setSelectedSongId] = React.useState<string | null>(null);
   const [selectedMemberId, setSelectedMemberId] = React.useState<string | null>(null);
   const [selectedShowId, setSelectedShowId] = React.useState<string | null>(null);
@@ -33,6 +52,7 @@ export default function App() {
     setSelectedShowId(null);
     setTab(key);
     localStorage.setItem('band-planner:active-tab', key);
+    window.location.hash = key;
   };
 
   const openSongDetail = (from: TabKey) => (id: string) => {

@@ -39,11 +39,14 @@ export interface Song {
   createdAt: string;
 }
 
+export type AvailabilityStatus = 'available' | 'unavailable' | 'tentative';
+
 export interface Member {
   id: string;
   name: string;
   instruments: Instrument[];
   roles?: Role[];           // optional for backward compat with v1 data
+  weeklyDefaults?: Partial<Record<string, AvailabilityStatus>>; // keys "0"-"6" (0=Sun)
   createdAt: string;
 }
 
@@ -72,8 +75,6 @@ export interface Availability {
   status: AvailabilityStatus;
 }
 
-export type AvailabilityStatus = 'available' | 'unavailable' | 'tentative';
-
 export interface Show {
   id: string;
   title: string;
@@ -95,5 +96,5 @@ export interface PersistedState {
   rehearsals: Rehearsal[];
   availability: Availability[];
   shows: Show[];
-  rehearsalDay?: number;       // 0=Sun .. 6=Sat; absent => 6 (Saturday)
+  rehearsalDays?: number[];    // each 0=Sun .. 6=Sat; absent => [6] (Saturday)
 }

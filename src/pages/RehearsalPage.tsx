@@ -1,11 +1,10 @@
 import * as React from 'react';
-import { CalendarClock, CheckCircle2, ChevronDown, ExternalLink, HelpCircle, Save, Zap } from 'lucide-react';
+import { CalendarClock, CheckCircle2, ChevronDown, ExternalLink, GripVertical, HelpCircle, Plus, Save, X, Zap } from 'lucide-react';
 import { AttendanceBar } from '@/components/AttendanceBar';
 import { Button } from '@/components/ui/button';
-import { SaveRehearsalDialog } from '@/components/SaveRehearsalDialog';
 import { useApp } from '@/store/AppContext';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
-import { SONG_STATUS_META } from '@/lib/songStatus';
+import { SONG_STATUS_META, SONG_STATUSES } from '@/lib/songStatus';
 import {
   planRehearsal,
   presentAssignmentsForPart,
@@ -14,8 +13,10 @@ import {
 } from '@/lib/rehearsalPlanner';
 import { Input } from '@/components/ui/input';
 import { cn, toLocalDateString } from '@/lib/utils';
-import { nearestWeekday, rehearsalDayLabel, type WeekDay } from '@/lib/rehearsalDay';
-import type { Instrument, Song } from '@/types';
+import { nextOfWeekdays, rehearsalDayLabel, type WeekDay } from '@/lib/rehearsalDay';
+import type { Instrument, Rehearsal, Song, SongStatus } from '@/types';
+
+const DRAG_MIME = 'application/x-rehearsal-song-id';
 
 // Short Chinese labels for the rehearsal page part rows.
 const PART_SHORT_LABEL: Record<Instrument, string> = {
@@ -38,8 +39,7 @@ export default function RehearsalPage({
   onAttendingChange,
   onSelectSong,
 }: RehearsalPageProps) {
-  const { state, addRehearsal } = useApp();
-  const [saveOpen, setSaveOpen] = React.useState(false);
+  const { state, addRehearsal, updateSong } = useApp();
   const [showReady, setShowReady] = React.useState(() => {
     try {
       return localStorage.getItem('band-planner:rehearsal-show-ready') !== 'false';
@@ -57,15 +57,64 @@ export default function RehearsalPage({
   const filterReady = (songs: Song[]) =>
     showReady ? songs : songs.filter((s) => s.status !== 'ready');
 
-  const rehearsalDay = (state.rehearsalDay ?? 6) as WeekDay;
+  const rDays: WeekDay[] = (state.rehearsalDays ?? [6]) as WeekDay[];
 
-  // Compute nearest rehearsal day for initial date.
   const nearestRehearsalDate = React.useMemo(
-    () => toLocalDateString(nearestWeekday(rehearsalDay)),
-    [rehearsalDay],
+    () => toLocalDateString(nextOfWeekdays(rDays)),
+    [rDays],
   );
 
   const [date, setDate] = React.useState(nearestRehearsalDate);
+
+  // User-curated list of songs rehearsed today.
+  const [rehearsedIds, setRehearsedIds] = React.useState<string[]>([]);
+  const rehearsedSet = React.useMemo(() => new Set(rehearsedIds), [rehearsedIds]);
+
+  // Per-song status overrides for the save dialog.
+  const [statusOverrides, setStatusOverrides] = React.useState<Map<string, SongStatus>>(new Map());
+
+  const addToRehearsed = (songId: string) => {
+    if (rehearsedSet.has(songId)) return;
+    setRehearsedIds((prev) => [...prev, songId]);
+  };
+
+  const removeFromRehearsed = (songId: string) => {
+    setRehearsedIds((prev) => prev.filter((id) => id !== songId));
+    setStatusOverrides((prev) => { const n = new Map(prev); n.delete(songId); return n; });
+  };
+
+  const setStatusOverride = (songId: string, status: SongStatus) => {
+    setStatusOverrides((prev) => new Map(prev).set(songId, status));
+  };
+
+  // Save handler: create rehearsal record + apply status updates.
+  const [saveNotes, setSaveNotes] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const handleSave = () => {
+    if (rehearsedIds.length === 0 || attendingIds.size === 0) return;
+    // Apply status overrides
+    for (const [songId, newStatus] of statusOverrides) {
+      const song = state.songs.find((s) => s.id === songId);
+      if (song && song.status !== newStatus) {
+        updateSong({ ...song, status: newStatus });
+      }
+    }
+    // Create rehearsal record
+    const rehearsal: Rehearsal = {
+      id: crypto.randomUUID(),
+      date,
+      attendingMemberIds: [...attendingIds],
+      selectedSongIds: [...rehearsedIds],
+      notes: saveNotes.trim() || undefined,
+      createdAt: new Date().toISOString(),
+    };
+    addRehearsal(rehearsal);
+    setSaving(false);
+    setSaveNotes('');
+    setRehearsedIds([]);
+    setStatusOverrides(new Map());
+  };
 
   // On mount, auto-prefill attendance for the nearest rehearsal day.
   const mountRef = React.useRef(false);
@@ -84,7 +133,6 @@ export default function RehearsalPage({
     onAttendingChange(suggested);
   }, [nearestRehearsalDate, state.members, state.availability, onAttendingChange]);
 
-  // Recompute attendance when the user picks a new date.
   const handleDateChange = (next: string) => {
     setDate(next);
     const suggested = new Set<string>();
@@ -104,13 +152,6 @@ export default function RehearsalPage({
     [state.songs, state.assignments, attendingIds],
   );
 
-  const selectedSongIds = React.useMemo(
-    () => [...plan.A, ...plan.B].map((s) => s.id),
-    [plan],
-  );
-
-  const canSave = attendingIds.size > 0 && selectedSongIds.length > 0;
-
   // "What-if" hints: for each absent member, how many C songs would upgrade?
   const whatIfHints = React.useMemo(() => {
     if (plan.C.length === 0) return [];
@@ -126,7 +167,6 @@ export default function RehearsalPage({
     return results.sort((a, b) => b.upgrades - a.upgrades);
   }, [plan.C, state.members, state.songs, state.assignments, attendingIds]);
 
-  // Pretty date hint: weekday + relative ("今天" / "明天" / "X 天后")
   const dateHint = React.useMemo(() => {
     const [y, mo, da] = date.split('-').map(Number) as [number, number, number];
     const target = new Date(y, mo - 1, da);
@@ -143,6 +183,15 @@ export default function RehearsalPage({
     return `${wk} · ${rel}`;
   }, [date]);
 
+  // Drop handler for the rehearsed panel.
+  const handlePanelDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const songId = e.dataTransfer.getData(DRAG_MIME);
+    if (songId) addToRehearsed(songId);
+  };
+
+  const songMap = React.useMemo(() => new Map(state.songs.map((s) => [s.id, s])), [state.songs]);
+
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
       <div className="mx-auto max-w-6xl px-6 py-5">
@@ -150,7 +199,7 @@ export default function RehearsalPage({
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">排练规划</h1>
             <p className="text-sm text-zinc-500 mt-1">
-              选个日期，出勤会按 availability 预填，A / B / C 自动算
+              选个日期，出勤会按 availability 预填，把要排的歌拖到下方
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-sm">
@@ -158,8 +207,8 @@ export default function RehearsalPage({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => handleDateChange(toLocalDateString(nearestWeekday(rehearsalDay)))}
-              title={`跳到最近的${rehearsalDayLabel(rehearsalDay)}`}
+              onClick={() => handleDateChange(toLocalDateString(nextOfWeekdays(rDays)))}
+              title={`跳到下一个排练日（${rDays.map((d) => rehearsalDayLabel(d as WeekDay)).join('、')}）`}
             >
               <CalendarClock className="mr-1 h-4 w-4" />
               下次排练
@@ -173,16 +222,6 @@ export default function RehearsalPage({
               />
               <span className="mt-0.5 px-1 text-[10px] text-zinc-500">{dateHint}</span>
             </div>
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              disabled={!canSave}
-              onClick={() => setSaveOpen(true)}
-            >
-              <Save className="mr-1 h-4 w-4" />
-              保存
-            </Button>
           </div>
         </div>
 
@@ -236,6 +275,8 @@ export default function RehearsalPage({
                   songs={filterReady(plan.A)}
                   attendingIds={attendingIds}
                   onSelect={onSelectSong}
+                  onAdd={addToRehearsed}
+                  rehearsedSet={rehearsedSet}
                 />
                 <BucketColumn
                   bucket="B"
@@ -244,6 +285,8 @@ export default function RehearsalPage({
                   songs={filterReady(plan.B)}
                   attendingIds={attendingIds}
                   onSelect={onSelectSong}
+                  onAdd={addToRehearsed}
+                  rehearsedSet={rehearsedSet}
                 />
                 <BucketColumn
                   bucket="C"
@@ -252,23 +295,121 @@ export default function RehearsalPage({
                   songs={filterReady(plan.C)}
                   attendingIds={attendingIds}
                   onSelect={onSelectSong}
+                  onAdd={addToRehearsed}
+                  rehearsedSet={rehearsedSet}
                   whatIfHints={whatIfHints}
                 />
+              </div>
+
+              {/* Rehearsed songs panel */}
+              <div
+                className={cn(
+                  'mt-5 rounded-xl border-2 border-dashed bg-white p-4 shadow-sm transition-colors',
+                  rehearsedIds.length === 0 ? 'border-zinc-200' : 'border-zinc-300',
+                )}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                onDrop={handlePanelDrop}
+              >
+                <div className="flex items-baseline justify-between mb-3">
+                  <h2 className="text-sm font-semibold text-zinc-900">
+                    今天排练的曲目
+                  </h2>
+                  <span className="text-xs text-zinc-400">{rehearsedIds.length} 首</span>
+                </div>
+
+                {rehearsedIds.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-zinc-400">
+                    从上面的 A / B / C 栏点击 + 或拖拽歌曲到这里
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {rehearsedIds.map((songId) => {
+                      const song = songMap.get(songId);
+                      if (!song) return null;
+                      const meta = SONG_STATUS_META[song.status];
+                      const override = statusOverrides.get(songId);
+                      return (
+                        <div
+                          key={songId}
+                          className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-zinc-900 truncate">{song.title}</p>
+                            {song.artist && (
+                              <p className="text-[10px] text-zinc-500 truncate">{song.artist}</p>
+                            )}
+                          </div>
+                          <span className={cn('shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium', meta.badge)}>
+                            {meta.label}
+                          </span>
+                          <select
+                            value={override ?? song.status}
+                            onChange={(e) => setStatusOverride(songId, e.target.value as SongStatus)}
+                            className="shrink-0 rounded border border-zinc-200 bg-white px-1.5 py-1 text-xs text-zinc-700"
+                            title="排练后更新状态"
+                          >
+                            {SONG_STATUSES.filter((s) => s !== 'shelved' && s !== 'writing').map((s) => (
+                              <option key={s} value={s}>{SONG_STATUS_META[s].label}</option>
+                            ))}
+                          </select>
+                          {override && override !== song.status && (
+                            <span className="text-[10px] text-amber-600 shrink-0">
+                              &rarr; {SONG_STATUS_META[override].label}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeFromRehearsed(songId)}
+                            className="shrink-0 rounded p-1 text-zinc-300 hover:bg-red-50 hover:text-red-500"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Save controls */}
+                {rehearsedIds.length > 0 && (
+                  <div className="mt-4 border-t border-zinc-100 pt-3">
+                    {saving ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={saveNotes}
+                          onChange={(e) => setSaveNotes(e.target.value)}
+                          placeholder="排练备注（可选）"
+                          rows={2}
+                          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900"
+                        />
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" onClick={handleSave}>
+                            <Save className="mr-1 h-4 w-4" />
+                            确认保存
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={() => setSaving(false)}>
+                            取消
+                          </Button>
+                          {statusOverrides.size > 0 && (
+                            <span className="text-[11px] text-amber-600">
+                              将更新 {statusOverrides.size} 首歌的状态
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <Button size="sm" onClick={() => setSaving(true)}>
+                        <Save className="mr-1 h-4 w-4" />
+                        保存排练记录
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           )}
         </div>
       </div>
-
-      <SaveRehearsalDialog
-        open={saveOpen}
-        onOpenChange={setSaveOpen}
-        defaultDate={date}
-        attendingMemberIds={[...attendingIds]}
-        selectedSongIds={selectedSongIds}
-        attendeeCount={attendingIds.size}
-        onSubmit={(rehearsal) => addRehearsal(rehearsal)}
-      />
     </div>
   );
 }
@@ -286,6 +427,8 @@ interface BucketColumnProps {
   songs: Song[];
   attendingIds: Set<string>;
   onSelect: (id: string) => void;
+  onAdd?: (songId: string) => void;
+  rehearsedSet?: Set<string>;
   whatIfHints?: WhatIfHint[];
 }
 
@@ -310,7 +453,7 @@ const BUCKET_TINT: Record<Bucket, { headerBg: string; headerText: string; ring: 
   },
 };
 
-function BucketColumn({ bucket, title, description, songs, attendingIds, onSelect, whatIfHints }: BucketColumnProps) {
+function BucketColumn({ bucket, title, description, songs, attendingIds, onSelect, onAdd, rehearsedSet, whatIfHints }: BucketColumnProps) {
   const tint = BUCKET_TINT[bucket];
   const hints = whatIfHints?.slice(0, 3); // show top 3 most impactful absent members
   return (
@@ -336,7 +479,13 @@ function BucketColumn({ bucket, title, description, songs, attendingIds, onSelec
         <ul className="divide-y divide-zinc-100">
           {songs.map((song) => (
             <li key={song.id}>
-              <SongCard song={song} attendingIds={attendingIds} onSelect={onSelect} />
+              <SongCard
+                song={song}
+                attendingIds={attendingIds}
+                onSelect={onSelect}
+                onAdd={onAdd}
+                isRehearsed={rehearsedSet?.has(song.id)}
+              />
             </li>
           ))}
         </ul>
@@ -363,9 +512,11 @@ interface SongCardProps {
   song: Song;
   attendingIds: Set<string>;
   onSelect: (id: string) => void;
+  onAdd?: (songId: string) => void;
+  isRehearsed?: boolean;
 }
 
-function SongCard({ song, attendingIds, onSelect }: SongCardProps) {
+function SongCard({ song, attendingIds, onSelect, onAdd, isRehearsed }: SongCardProps) {
   const { state } = useApp();
   const [expanded, setExpanded] = React.useState(false);
   const memberName = (id: string) => state.members.find((m) => m.id === id)?.name ?? '?';
@@ -383,48 +534,68 @@ function SongCard({ song, attendingIds, onSelect }: SongCardProps) {
   const allCovered = totalCovered >= totalRequired;
 
   return (
-    <div className="px-3 py-1.5">
+    <div
+      className={cn('px-3 py-1.5', isRehearsed && 'opacity-40')}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DRAG_MIME, song.id);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+    >
       {/* Collapsed row: title + status + coverage indicator */}
-      <button
-        type="button"
-        onClick={() => setExpanded((e) => !e)}
-        className="flex w-full items-center gap-2 text-left hover:bg-zinc-50 -mx-1 px-1 rounded"
-      >
-        <ChevronDown
-          className={cn(
-            'h-3 w-3 shrink-0 text-zinc-400 transition-transform',
-            !expanded && '-rotate-90',
-          )}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <p className="truncate text-[13px] font-medium leading-tight text-zinc-900">{song.title}</p>
-            {song.kind === 'original' && (
-              <span className="inline-flex items-center rounded border border-violet-300 bg-violet-50 px-1 py-0 text-[9px] font-medium text-violet-700">
-                原创
-              </span>
+      <div className="flex items-center gap-1">
+        <GripVertical className="h-3 w-3 shrink-0 cursor-grab text-zinc-300" />
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left hover:bg-zinc-50 -mx-1 px-1 rounded"
+        >
+          <ChevronDown
+            className={cn(
+              'h-3 w-3 shrink-0 text-zinc-400 transition-transform',
+              !expanded && '-rotate-90',
+            )}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <p className="truncate text-[13px] font-medium leading-tight text-zinc-900">{song.title}</p>
+              {song.kind === 'original' && (
+                <span className="inline-flex items-center rounded border border-violet-300 bg-violet-50 px-1 py-0 text-[9px] font-medium text-violet-700">
+                  原创
+                </span>
+              )}
+            </div>
+            {song.artist && (
+              <p className="truncate text-[10px] leading-tight text-zinc-500">{song.artist}</p>
             )}
           </div>
-          {song.artist && (
-            <p className="truncate text-[10px] leading-tight text-zinc-500">{song.artist}</p>
-          )}
-        </div>
-        {/* Coverage fraction */}
-        <span className={cn(
-          'shrink-0 text-[10px] font-medium tabular-nums',
-          allCovered ? 'text-emerald-600' : 'text-red-600',
-        )}>
-          {totalCovered}/{totalRequired}
-        </span>
-        <span
-          className={cn(
-            'shrink-0 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium',
-            SONG_STATUS_META[song.status].badge,
-          )}
-        >
-          {SONG_STATUS_META[song.status].label}
-        </span>
-      </button>
+          {/* Coverage fraction */}
+          <span className={cn(
+            'shrink-0 text-[10px] font-medium tabular-nums',
+            allCovered ? 'text-emerald-600' : 'text-red-600',
+          )}>
+            {totalCovered}/{totalRequired}
+          </span>
+          <span
+            className={cn(
+              'shrink-0 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium',
+              SONG_STATUS_META[song.status].badge,
+            )}
+          >
+            {SONG_STATUS_META[song.status].label}
+          </span>
+        </button>
+        {onAdd && !isRehearsed && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onAdd(song.id); }}
+            className="shrink-0 rounded p-1 text-zinc-300 hover:bg-emerald-50 hover:text-emerald-600"
+            title="加入今天排练"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
 
       {/* Expanded: part details + link to full page */}
       {expanded && (
