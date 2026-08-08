@@ -14,6 +14,11 @@ export const INSTRUMENT_META: Record<Instrument, InstrumentMeta> = {
     label: '主唱',
     badge: 'bg-purple-100 text-purple-800 border-purple-200',
   },
+  harmony: {
+    abbrev: 'Ha',
+    label: '和声',
+    badge: 'bg-pink-100 text-pink-800 border-pink-200',
+  },
   keys: {
     abbrev: 'Key',
     label: '键盘',
@@ -43,6 +48,7 @@ export const INSTRUMENT_META: Record<Instrument, InstrumentMeta> = {
 
 export const INSTRUMENTS: Instrument[] = [
   'vocal',
+  'harmony',
   'keys',
   'guitar_lead',
   'guitar_rhythm',

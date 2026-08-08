@@ -21,6 +21,7 @@ const DRAG_MIME = 'application/x-rehearsal-song-id';
 // Short Chinese labels for the rehearsal page part rows.
 const PART_SHORT_LABEL: Record<Instrument, string> = {
   vocal: '主唱',
+  harmony: '和声',
   keys: '键盘',
   guitar_lead: '主音',
   guitar_rhythm: '节奏',
@@ -527,9 +528,8 @@ function SongCard({ song, attendingIds, onSelect, onAdd, isRehearsed }: SongCard
   const totalRequired = song.requiredParts.length;
   const totalCovered = uniqueParts.reduce((sum, part) => {
     const present = presentAssignmentsForPart(song.id, part, state.assignments, attendingIds);
-    const usable = present.filter((a) => (a.status ?? 'want') !== 'want');
     const required = song.requiredParts.filter((p) => p === part).length;
-    return sum + Math.min(usable.length, required);
+    return sum + Math.min(present.length, required);
   }, 0);
   const allCovered = totalCovered >= totalRequired;
 
@@ -606,9 +606,11 @@ function SongCard({ song, attendingIds, onSelect, onAdd, isRehearsed }: SongCard
           {uniqueParts.map((part) => {
             const meta = INSTRUMENT_META[part];
             const present = presentAssignmentsForPart(song.id, part, state.assignments, attendingIds);
+            const absent = state.assignments.filter(
+              (a) => a.songId === song.id && a.part === part && !attendingIds.has(a.memberId),
+            );
             const required = song.requiredParts.filter((p) => p === part).length;
-            const usable = present.filter((a) => (a.status ?? 'want') !== 'want');
-            const covered = Math.min(usable.length, required);
+            const covered = Math.min(present.length, required);
             const missing = required - covered;
             return (
               <div key={part} className="flex items-center gap-1.5 text-[11px]">
@@ -621,24 +623,26 @@ function SongCard({ song, attendingIds, onSelect, onAdd, isRehearsed }: SongCard
                   {PART_SHORT_LABEL[part]}
                 </span>
                 {present.length === 0 ? (
-                  <span className="text-red-600">缺{required > 1 ? ` ×${required}` : ''}</span>
+                  <span className="text-red-600">
+                    缺{absent.length > 0
+                      ? `（${absent.map((a) => memberName(a.memberId)).join('、')}没来）`
+                      : required > 1 ? ` ×${required}` : ''}
+                  </span>
                 ) : (
                   <span className="text-zinc-700">
-                    {present.map((a, i) => {
-                      const notReady = (a.status ?? 'want') === 'want';
-                      return (
-                        <span
-                          key={a.id}
-                          className={cn(notReady && 'text-zinc-400 line-through')}
-                          title={notReady ? '状态：可以练（还没练好）' : undefined}
-                        >
+                    {present.map((a, i) => (
+                        <span key={a.id} className="text-zinc-700">
                           {i > 0 && '、'}
                           {memberName(a.memberId)}
                           {a.isEmergency && <Zap className="inline h-3 w-3 text-amber-600 ml-0.5" />}
                         </span>
-                      );
-                    })}
-                    {missing > 0 && <span className="text-red-600 ml-1">还缺 {missing}</span>}
+                    ))}
+                    {missing > 0 && (
+                      <span className="text-red-600 ml-1">
+                        还缺 {missing}
+                        {absent.length > 0 && `（${absent.map((a) => memberName(a.memberId)).join('、')}没来）`}
+                      </span>
+                    )}
                   </span>
                 )}
               </div>

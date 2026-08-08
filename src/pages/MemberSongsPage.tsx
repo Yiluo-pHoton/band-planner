@@ -35,7 +35,7 @@ const GROUP_LABEL: Record<InstrumentGroup, string> = {
 };
 
 function instrumentToGroup(inst: Instrument): InstrumentGroup {
-  if (inst === 'vocal') return 'vocal';
+  if (inst === 'vocal' || inst === 'harmony') return 'vocal';
   if (inst === 'drums') return 'drums';
   if (inst === 'guitar_lead' || inst === 'guitar_rhythm') return 'guitar';
   if (inst === 'bass') return 'bass';

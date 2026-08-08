@@ -180,6 +180,7 @@ const GROUP_LABEL: Record<InstrumentGroup, string> = {
   vocal: '主唱', drums: '鼓', guitar: '吉他', bass: '贝斯', keys: '键盘',
 };
 function instrumentToGroup(inst: Instrument): InstrumentGroup {
+  if (inst === 'harmony') return 'vocal';
   if (inst === 'guitar_lead' || inst === 'guitar_rhythm') return 'guitar';
   return inst as InstrumentGroup;
 }

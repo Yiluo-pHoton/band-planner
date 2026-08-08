@@ -2,6 +2,7 @@
 
 export type Instrument =
   | 'vocal'
+  | 'harmony'
   | 'keys'
   | 'guitar_lead'
   | 'guitar_rhythm'

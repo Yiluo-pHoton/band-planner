@@ -61,6 +61,17 @@ export const migrations: Migration[] = [
       : [];
     return { ...rest, schemaVersion: 6, rehearsalDays: days };
   },
+  // index 6: v6 -> v7. Add 'harmony' to every member's instruments.
+  (data) => ({
+    ...data,
+    schemaVersion: 7,
+    members: (data?.members ?? []).map((m: any) => ({
+      ...m,
+      instruments: Array.isArray(m.instruments) && !m.instruments.includes('harmony')
+        ? [...m.instruments, 'harmony']
+        : m.instruments,
+    })),
+  }),
 ];
 
 export function migrate(raw: any): PersistedState {
