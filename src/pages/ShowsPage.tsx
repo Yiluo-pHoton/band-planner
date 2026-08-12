@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Calendar, Plus, Trash2, Pencil, Ticket } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
+import { useAuthContext } from '@/store/AuthContext';
 import type { Show } from '@/types';
 import { cn } from '@/lib/utils';
 import { countWeekdaysBetweenMulti, type WeekDay } from '@/lib/rehearsalDay';
@@ -25,6 +26,7 @@ interface ShowsPageProps {
 
 export default function ShowsPage({ onSelectShow }: ShowsPageProps) {
   const { state, addShow, updateShow, deleteShow } = useApp();
+  const { canEdit } = useAuthContext();
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Show | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = React.useState<string | null>(null);
@@ -41,14 +43,16 @@ export default function ShowsPage({ onSelectShow }: ShowsPageProps) {
       <div className="mx-auto max-w-3xl">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-zinc-900">演出</h1>
-          <button
-            type="button"
-            onClick={() => { setEditing(null); setDialogOpen(true); }}
-            className="inline-flex items-center gap-2 rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-          >
-            <Plus className="h-4 w-4" />
-            新建演出
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => { setEditing(null); setDialogOpen(true); }}
+              className="inline-flex items-center gap-2 rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+            >
+              <Plus className="h-4 w-4" />
+              新建演出
+            </button>
+          )}
         </div>
 
         {sorted.length === 0 ? (
@@ -56,14 +60,16 @@ export default function ShowsPage({ onSelectShow }: ShowsPageProps) {
             <Ticket className="h-10 w-10 text-zinc-300 mb-3" />
             <p className="text-sm font-medium text-zinc-900">还没有演出</p>
             <p className="text-xs text-zinc-500 mt-1 mb-4">创建一场演出来规划你的 setlist</p>
-            <button
-              type="button"
-              onClick={() => { setEditing(null); setDialogOpen(true); }}
-              className="inline-flex items-center gap-2 rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-            >
-              <Plus className="h-4 w-4" />
-              添加第一场演出
-            </button>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => { setEditing(null); setDialogOpen(true); }}
+                className="inline-flex items-center gap-2 rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+              >
+                <Plus className="h-4 w-4" />
+                添加第一场演出
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -106,22 +112,24 @@ export default function ShowsPage({ onSelectShow }: ShowsPageProps) {
                       <span>{capacityLabel}</span>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setEditing(show); setDialogOpen(true); }}
-                      className="rounded p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(show.id); }}
-                      className="rounded p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
+                  {canEdit && (
+                    <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setEditing(show); setDialogOpen(true); }}
+                        className="rounded p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(show.id); }}
+                        className="rounded p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

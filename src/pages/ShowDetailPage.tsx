@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { ArrowLeft, CalendarPlus, GripVertical, Music, X } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
+import { useAuthContext } from '@/store/AuthContext';
 import { INSTRUMENTS } from '@/lib/instruments';
 import { SONG_STATUS_META } from '@/lib/songStatus';
 import { cn } from '@/lib/utils';
@@ -97,6 +98,7 @@ interface ShowDetailPageProps {
 
 export default function ShowDetailPage({ showId, onBack, onSelectSong }: ShowDetailPageProps) {
   const { state, updateShow, addRehearsal, deleteRehearsal } = useApp();
+  const { canEdit } = useAuthContext();
   const show = state.shows.find((s) => s.id === showId);
 
   if (!show) {
@@ -142,7 +144,7 @@ export default function ShowDetailPage({ showId, onBack, onSelectSong }: ShowDet
       </div>
 
       {/* Performer bar */}
-      <PerformerBar show={show} members={state.members} onUpdate={updateShow} />
+      <PerformerBar show={show} members={state.members} onUpdate={updateShow} canEdit={canEdit} />
 
       {/* Rehearsal schedule */}
       <RehearsalSchedule
@@ -150,6 +152,7 @@ export default function ShowDetailPage({ showId, onBack, onSelectSong }: ShowDet
         rehearsals={state.rehearsals}
         onAddRehearsal={addRehearsal}
         onDeleteRehearsal={deleteRehearsal}
+        canEdit={canEdit}
       />
 
       {/* Main two-column layout */}
@@ -159,6 +162,7 @@ export default function ShowDetailPage({ showId, onBack, onSelectSong }: ShowDet
           songs={state.songs}
           assignments={state.assignments}
           onSelectSong={onSelectSong}
+          canEdit={canEdit}
         />
         <SetlistPanel
           show={show}
@@ -166,6 +170,7 @@ export default function ShowDetailPage({ showId, onBack, onSelectSong }: ShowDet
           assignments={state.assignments}
           onUpdateShow={updateShow}
           onSelectSong={onSelectSong}
+          canEdit={canEdit}
         />
       </div>
     </div>
@@ -195,10 +200,12 @@ function PerformerBar({
   show,
   members,
   onUpdate,
+  canEdit,
 }: {
   show: Show;
   members: Member[];
   onUpdate: (show: Show) => void;
+  canEdit: boolean;
 }) {
   const performerSet = new Set(show.performerIds);
   const toggle = (id: string) => {
@@ -233,12 +240,14 @@ function PerformerBar({
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => toggle(m.id)}
+                  onClick={canEdit ? () => toggle(m.id) : undefined}
                   className={cn(
                     'rounded-full px-3 py-1 text-sm font-medium transition-colors',
                     active
                       ? 'bg-zinc-900 text-white'
-                      : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200',
+                      : 'bg-zinc-100 text-zinc-500',
+                    canEdit && !active && 'hover:bg-zinc-200',
+                    !canEdit && 'cursor-default',
                   )}
                 >
                   {m.name}
@@ -259,11 +268,13 @@ function CandidatePool({
   songs,
   assignments,
   onSelectSong,
+  canEdit,
 }: {
   show: Show;
   songs: Song[];
   assignments: Assignment[];
   onSelectSong: (id: string) => void;
+  canEdit: boolean;
 }) {
   const setlistSet = new Set(show.setlistSongIds);
 
@@ -302,16 +313,18 @@ function CandidatePool({
             return (
               <div
                 key={song.id}
-                draggable={!inSetlist}
-                onDragStart={(e) => {
+                draggable={canEdit && !inSetlist}
+                onDragStart={canEdit ? (e) => {
                   e.dataTransfer.effectAllowed = 'move';
                   e.dataTransfer.setData('application/x-band-song-id', song.id);
-                }}
+                } : undefined}
                 className={cn(
                   'rounded-lg border p-3 text-sm transition-colors',
                   inSetlist
                     ? 'border-zinc-100 bg-zinc-50 opacity-40'
-                    : 'border-zinc-200 bg-white hover:border-zinc-300 hover:shadow-sm cursor-grab',
+                    : canEdit
+                      ? 'border-zinc-200 bg-white hover:border-zinc-300 hover:shadow-sm cursor-grab'
+                      : 'border-zinc-200 bg-white',
                 )}
               >
                 {/* Top row: score + status */}
@@ -361,12 +374,14 @@ function SetlistPanel({
   assignments,
   onUpdateShow,
   onSelectSong,
+  canEdit,
 }: {
   show: Show;
   songs: Song[];
   assignments: Assignment[];
   onUpdateShow: (show: Show) => void;
   onSelectSong: (id: string) => void;
+  canEdit: boolean;
 }) {
   const [dragIdx, setDragIdx] = React.useState<number | null>(null);
   const [overIdx, setOverIdx] = React.useState<number | null>(null);
@@ -442,8 +457,8 @@ function SetlistPanel({
   return (
     <div
       className="w-80 shrink-0 rounded-lg border border-zinc-200 bg-white flex flex-col"
-      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-      onDrop={handlePoolDrop}
+      onDragOver={canEdit ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } : undefined}
+      onDrop={canEdit ? handlePoolDrop : undefined}
     >
       <div className="border-b border-zinc-100 px-4 py-3">
         <div className="flex items-center justify-between">
@@ -476,11 +491,11 @@ function SetlistPanel({
               return (
                 <div
                   key={songId}
-                  draggable
-                  onDragStart={handleDragStart(idx)}
-                  onDragOver={handleDragOver(idx)}
-                  onDrop={handleDrop(idx)}
-                  onDragEnd={handleDragEnd}
+                  draggable={canEdit}
+                  onDragStart={canEdit ? handleDragStart(idx) : undefined}
+                  onDragOver={canEdit ? handleDragOver(idx) : undefined}
+                  onDrop={canEdit ? handleDrop(idx) : undefined}
+                  onDragEnd={canEdit ? handleDragEnd : undefined}
                   className={cn(
                     'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-all',
                     isDragging && 'opacity-30',
@@ -507,14 +522,16 @@ function SetlistPanel({
                       </span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => remove(songId)}
-                    className="shrink-0 rounded p-1 text-zinc-300 hover:bg-red-50 hover:text-red-500"
-                    title="移出歌单"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => remove(songId)}
+                      className="shrink-0 rounded p-1 text-zinc-300 hover:bg-red-50 hover:text-red-500"
+                      title="移出歌单"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -532,11 +549,13 @@ function RehearsalSchedule({
   rehearsals,
   onAddRehearsal,
   onDeleteRehearsal,
+  canEdit,
 }: {
   showDate: string;
   rehearsals: Rehearsal[];
   onAddRehearsal: (r: Rehearsal) => void;
   onDeleteRehearsal: (id: string) => void;
+  canEdit: boolean;
 }) {
   const { state: appState } = useApp();
   const [addingDate, setAddingDate] = React.useState('');
@@ -613,7 +632,7 @@ function RehearsalSchedule({
                 >
                   {date.slice(5)}
                   {isRehearsalDay && <span className="text-zinc-400">{rehearsalDayLabel(new Date(date + 'T00:00:00').getDay() as WeekDay).slice(1)}</span>}
-                  {isManual && (
+                  {isManual && canEdit && (
                     <button
                       type="button"
                       onClick={() => handleRemove(date)}
@@ -626,25 +645,27 @@ function RehearsalSchedule({
               );
             })}
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={addingDate}
-              min={todayStr}
-              max={showDate}
-              onChange={(e) => setAddingDate(e.target.value)}
-              className="rounded-md border border-zinc-200 px-2 py-1 text-xs focus:border-zinc-400 focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={handleAdd}
-              disabled={!addingDate}
-              className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-200 disabled:opacity-40"
-            >
-              <CalendarPlus className="h-3 w-3" />
-              添加排练
-            </button>
-          </div>
+          {canEdit && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={addingDate}
+                min={todayStr}
+                max={showDate}
+                onChange={(e) => setAddingDate(e.target.value)}
+                className="rounded-md border border-zinc-200 px-2 py-1 text-xs focus:border-zinc-400 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleAdd}
+                disabled={!addingDate}
+                className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-200 disabled:opacity-40"
+              >
+                <CalendarPlus className="h-3 w-3" />
+                添加排练
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

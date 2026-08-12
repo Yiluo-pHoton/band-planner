@@ -3,11 +3,13 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
+import { useAuthContext } from '@/store/AuthContext';
 import { cn } from '@/lib/utils';
 import type { Rehearsal } from '@/types';
 
 export default function RehearsalHistoryPage() {
   const { state, deleteRehearsal, updateRehearsal } = useApp();
+  const { canEdit } = useAuthContext();
   const [pendingDelete, setPendingDelete] = React.useState<Rehearsal | null>(null);
   const [editingId, setEditingId] = React.useState<string | null>(null);
 
@@ -60,24 +62,26 @@ export default function RehearsalHistoryPage() {
                           {r.attendingMemberIds.length} 人 · {r.selectedSongIds.length} 首
                         </p>
                       </div>
-                      <div className="flex shrink-0 items-center gap-0.5">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setEditingId(r.id)}
-                        >
-                          <Pencil className="h-4 w-4 text-zinc-400" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setPendingDelete(r)}
-                        >
-                          <Trash2 className="h-4 w-4 text-zinc-400" />
-                        </Button>
-                      </div>
+                      {canEdit && (
+                        <div className="flex shrink-0 items-center gap-0.5">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setEditingId(r.id)}
+                          >
+                            <Pencil className="h-4 w-4 text-zinc-400" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setPendingDelete(r)}
+                          >
+                            <Trash2 className="h-4 w-4 text-zinc-400" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
 
                     <div className="mt-3 space-y-2 text-xs">

@@ -2,6 +2,7 @@ import * as React from 'react';
 import { ArrowLeft, X, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useApp } from '@/store/AppContext';
+import { useAuthContext } from '@/store/AuthContext';
 import { INSTRUMENT_META } from '@/lib/instruments';
 import { SONG_STATUS_META } from '@/lib/songStatus';
 import { cn } from '@/lib/utils';
@@ -19,6 +20,8 @@ interface MemberDetailPageProps {
 
 export default function MemberDetailPage({ memberId, onBack }: MemberDetailPageProps) {
   const { state, addAssignment, updateAssignment, deleteAssignment, updateSong } = useApp();
+  const { canEdit, linkedMemberId } = useAuthContext();
+  const canEditThis = canEdit || linkedMemberId === memberId;
   const [dragSongId, setDragSongId] = React.useState<string | null>(null);
   const [hoverBoard, setHoverBoard] = React.useState<BoardKey | null>(null);
 
@@ -189,13 +192,13 @@ export default function MemberDetailPage({ memberId, onBack }: MemberDetailPageP
                         song={s}
                         isEmergency={!!a?.isEmergency}
                         onToggleEmergency={
-                          a
+                          canEditThis && a
                             ? () => updateAssignment({ ...a, isEmergency: !a.isEmergency })
                             : undefined
                         }
-                        onRemove={() => {
+                        onRemove={canEditThis ? () => {
                           if (a) removeFromInstrumentBoard(a);
-                        }}
+                        } : undefined}
                       />
                     );
                   })
@@ -227,7 +230,7 @@ export default function MemberDetailPage({ memberId, onBack }: MemberDetailPageP
               <EmptySlot />
             ) : (
               composerSongs.map((s) => (
-                <SongChip key={s.id} song={s} onRemove={() => removeFromComposer(s)} />
+                <SongChip key={s.id} song={s} onRemove={canEditThis ? () => removeFromComposer(s) : undefined} />
               ))
             )}
           </Board>
@@ -255,14 +258,14 @@ export default function MemberDetailPage({ memberId, onBack }: MemberDetailPageP
               <EmptySlot />
             ) : (
               lyricistSongs.map((s) => (
-                <SongChip key={s.id} song={s} onRemove={() => removeFromLyricist(s)} />
+                <SongChip key={s.id} song={s} onRemove={canEditThis ? () => removeFromLyricist(s) : undefined} />
               ))
             )}
           </Board>
         </div>
 
         {/* Song pool */}
-        <div className="sticky bottom-4 mt-6 rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-md backdrop-blur">
+        {canEditThis && <div className="sticky bottom-4 mt-6 rounded-xl border border-zinc-200 bg-white/95 p-3 shadow-md backdrop-blur">
           <div className="mb-2 flex items-baseline justify-between">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
               曲目池
@@ -291,7 +294,7 @@ export default function MemberDetailPage({ memberId, onBack }: MemberDetailPageP
               ))
             )}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );
@@ -366,7 +369,7 @@ function SongChip({
   song: Song;
   isEmergency?: boolean;
   onToggleEmergency?: () => void;
-  onRemove: () => void;
+  onRemove?: () => void;
 }) {
   return (
     <div
@@ -404,14 +407,16 @@ function SongChip({
           {song.artist && <div className="truncate text-[11px] text-zinc-500">{song.artist}</div>}
         </div>
       </button>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="rounded p-0.5 text-zinc-400 opacity-0 hover:bg-zinc-100 hover:text-red-600 group-hover:opacity-100"
-        title="删除"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="rounded p-0.5 text-zinc-400 opacity-0 hover:bg-zinc-100 hover:text-red-600 group-hover:opacity-100"
+          title="删除"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }

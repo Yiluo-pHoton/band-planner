@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { AppProvider } from '@/store/AppContext';
+import { AuthProvider } from '@/store/AuthContext';
 import { Sidebar, type TabKey } from '@/components/Sidebar';
 import SongsPage from '@/pages/SongsPage';
 import SongDetailPage from '@/pages/SongDetailPage';
@@ -12,8 +13,9 @@ import AvailabilityPage from '@/pages/AvailabilityPage';
 import ShowsPage from '@/pages/ShowsPage';
 import ShowDetailPage from '@/pages/ShowDetailPage';
 import WhoNeedsToComePage from '@/pages/WhoNeedsToComePage';
+import AdminPage from '@/pages/AdminPage';
 
-const VALID_TABS: TabKey[] = ['songs','members','memberSongs','availability','rehearsal','history','shows','whoNeeds'];
+const VALID_TABS: TabKey[] = ['songs','members','memberSongs','availability','rehearsal','history','shows','whoNeeds','admin'];
 
 function tabFromHash(): TabKey | null {
   const h = window.location.hash.replace('#', '');
@@ -91,6 +93,7 @@ export default function App() {
   const showDetail = showSongDetail || showMemberDetail || showShowDetail;
 
   return (
+    <AuthProvider>
     <AppProvider>
       <div className="flex min-h-screen bg-zinc-50">
         <Sidebar
@@ -125,10 +128,12 @@ export default function App() {
               {tab === 'history' && <RehearsalHistoryPage />}
               {tab === 'whoNeeds' && <WhoNeedsToComePage />}
               {tab === 'shows' && <ShowsPage onSelectShow={openShowDetail} />}
+              {tab === 'admin' && <AdminPage />}
             </>
           )}
         </main>
       </div>
     </AppProvider>
+    </AuthProvider>
   );
 }

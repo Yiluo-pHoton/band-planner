@@ -34,12 +34,30 @@ function reducer(state: PersistedState, action: Action): PersistedState {
       // If requiredParts shrank, drop assignments for parts no longer needed.
       // Invariant #3 in the data-model skill.
       const allowedParts = new Set(action.song.requiredParts);
+      const oldSong = state.songs.find((s) => s.id === action.song.id);
+      const statusChanged = oldSong && oldSong.status !== action.song.status;
+
+      // Auto-promote non-emergency assignment statuses when song status advances:
+      //   rehearsing / polishing → practicing
+      //   ready → mastered
+      let promoteTo: 'practicing' | 'mastered' | null = null;
+      if (statusChanged) {
+        if (action.song.status === 'rehearsing' || action.song.status === 'polishing') {
+          promoteTo = 'practicing';
+        } else if (action.song.status === 'ready') {
+          promoteTo = 'mastered';
+        }
+      }
+
       return {
         ...state,
         songs: state.songs.map((s) => (s.id === action.song.id ? action.song : s)),
-        assignments: state.assignments.filter(
-          (a) => a.songId !== action.song.id || allowedParts.has(a.part),
-        ),
+        assignments: state.assignments
+          .filter((a) => a.songId !== action.song.id || allowedParts.has(a.part))
+          .map((a) => {
+            if (!promoteTo || a.songId !== action.song.id || a.isEmergency) return a;
+            return { ...a, status: promoteTo };
+          }),
       };
     }
 

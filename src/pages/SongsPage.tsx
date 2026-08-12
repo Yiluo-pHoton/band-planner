@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { SongFormDialog } from '@/components/SongFormDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
+import { useAuthContext } from '@/store/AuthContext';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
 import { SONG_STATUSES, SONG_STATUS_META, isStatusAllowed } from '@/lib/songStatus';
 import { nextRehearsalDatesMulti, type WeekDay } from '@/lib/rehearsalDay';
@@ -99,6 +100,7 @@ type ViewMode = 'table' | 'cards';
 
 export default function SongsPage({ onSelect }: SongsPageProps) {
   const { state, addSong, updateSong, deleteSong } = useApp();
+  const { canEdit } = useAuthContext();
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Song | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = React.useState<Song | undefined>(undefined);
@@ -211,16 +213,23 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
                 <Columns3 className="h-4 w-4" />
               </button>
             </div>
-            <Button onClick={openCreate}>
-              <Plus className="h-4 w-4" />
-              添加歌曲
-            </Button>
+            {canEdit && (
+              <Button onClick={openCreate}>
+                <Plus className="h-4 w-4" />
+                添加歌曲
+              </Button>
+            )}
           </div>
         </div>
 
         <div className="mt-6">
           {songs.length === 0 ? (
-            <EmptyState onAdd={openCreate} />
+            canEdit ? <EmptyState onAdd={openCreate} /> : (
+              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-200 bg-white py-16 text-center">
+                <Music className="h-10 w-10 text-zinc-300 mb-3" />
+                <p className="text-sm font-medium text-zinc-900">还没有歌曲</p>
+              </div>
+            )
           ) : view === 'cards' ? (
             <KanbanBoard
               songs={state.songs}
@@ -231,6 +240,7 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
               onEdit={openEdit}
               onDelete={setDeleteTarget}
               onStatusChange={(song, status) => updateSong({ ...song, status })}
+              canEdit={canEdit}
             />
           ) : (
             <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
@@ -240,7 +250,7 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
                     <SortableTh label="歌曲" sortKey="title" sort={sort} onClick={cycleSort} />
                     <SortableTh label="状态" sortKey="status" sort={sort} onClick={cycleSort} />
                     <th className="px-5 py-3 text-left">配器</th>
-                    <th className="w-20 px-5 py-3 text-right" />
+                    {canEdit && <th className="w-20 px-5 py-3 text-right" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100">
@@ -307,16 +317,18 @@ export default function SongsPage({ onSelect }: SongsPageProps) {
                         <td className="px-5 py-3.5">
                           <PartsRow song={song} />
                         </td>
-                        <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex justify-end gap-0.5 opacity-0 group-hover:opacity-100">
-                            <Button variant="ghost" size="icon" onClick={() => openEdit(song)}>
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(song)}>
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </Button>
-                          </div>
-                        </td>
+                        {canEdit && (
+                          <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-end gap-0.5 opacity-0 group-hover:opacity-100">
+                              <Button variant="ghost" size="icon" onClick={() => openEdit(song)}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(song)}>
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </Button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -452,9 +464,10 @@ interface KanbanBoardProps {
   onEdit: (song: Song) => void;
   onDelete: (song: Song) => void;
   onStatusChange: (song: Song, status: SongStatus) => void;
+  canEdit: boolean;
 }
 
-function KanbanBoard({ songs, assignments, unavailableMap, backupCoveredMap, onSelect, onEdit, onDelete, onStatusChange }: KanbanBoardProps) {
+function KanbanBoard({ songs, assignments, unavailableMap, backupCoveredMap, onSelect, onEdit, onDelete, onStatusChange, canEdit }: KanbanBoardProps) {
   const [dragOver, setDragOver] = React.useState<SongStatus | null>(null);
   const [dragOverIdx, setDragOverIdx] = React.useState<number | null>(null);
   const [columnOrder, setColumnOrder] = React.useState<ColumnOrder>(loadColumnOrder);
@@ -570,6 +583,7 @@ function KanbanBoard({ songs, assignments, unavailableMap, backupCoveredMap, onS
                     onSelect={onSelect ? () => onSelect(song.id) : undefined}
                     onEdit={() => onEdit(song)}
                     onDelete={() => onDelete(song)}
+                    canEdit={canEdit}
                   />
                 );
               })
@@ -592,9 +606,10 @@ interface KanbanCardProps {
   onSelect?: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  canEdit: boolean;
 }
 
-function KanbanCard({ song, missing, unavailNames, backupCovered, isDropTarget, onDragOver, onDrop, onSelect, onEdit, onDelete }: KanbanCardProps) {
+function KanbanCard({ song, missing, unavailNames, backupCovered, isDropTarget, onDragOver, onDrop, onSelect, onEdit, onDelete, canEdit }: KanbanCardProps) {
   const [isDragging, setIsDragging] = React.useState(false);
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -605,14 +620,15 @@ function KanbanCard({ song, missing, unavailNames, backupCovered, isDropTarget, 
 
   return (
     <div
-      draggable
-      onDragStart={handleDragStart}
+      draggable={canEdit}
+      onDragStart={canEdit ? handleDragStart : undefined}
       onDragEnd={() => setIsDragging(false)}
       onDragOver={(e) => { e.preventDefault(); onDragOver?.(); }}
       onDrop={onDrop}
       onClick={onSelect}
       className={cn(
-        'group relative cursor-grab rounded-lg border bg-white px-2.5 py-2 transition-colors active:cursor-grabbing',
+        'group relative rounded-lg border bg-white px-2.5 py-2 transition-colors',
+        canEdit && 'cursor-grab active:cursor-grabbing',
         isDropTarget ? 'border-zinc-400 border-t-2' : 'border-zinc-200',
         onSelect && 'hover:border-zinc-300 hover:shadow-sm',
         isDragging && 'opacity-40',
@@ -663,17 +679,19 @@ function KanbanCard({ song, missing, unavailNames, backupCovered, isDropTarget, 
       )}
 
       {/* Hover actions */}
-      <div
-        className="absolute -right-1 -top-1 flex gap-0.5 rounded-md border border-zinc-200 bg-white shadow-sm opacity-0 group-hover:opacity-100"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button type="button" onClick={onEdit} className="p-1 text-zinc-500 hover:text-zinc-900">
-          <Pencil className="h-3 w-3" />
-        </button>
-        <button type="button" onClick={onDelete} className="p-1 text-red-500 hover:text-red-700">
-          <Trash2 className="h-3 w-3" />
-        </button>
-      </div>
+      {canEdit && (
+        <div
+          className="absolute -right-1 -top-1 flex gap-0.5 rounded-md border border-zinc-200 bg-white shadow-sm opacity-0 group-hover:opacity-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button type="button" onClick={onEdit} className="p-1 text-zinc-500 hover:text-zinc-900">
+            <Pencil className="h-3 w-3" />
+          </button>
+          <button type="button" onClick={onDelete} className="p-1 text-red-500 hover:text-red-700">
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

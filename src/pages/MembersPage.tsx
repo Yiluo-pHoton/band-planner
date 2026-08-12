@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { MemberFormDialog } from '@/components/MemberFormDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
+import { useAuthContext } from '@/store/AuthContext';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
 import { ROLES, ROLE_META } from '@/lib/roles';
 import { cn } from '@/lib/utils';
@@ -17,6 +18,7 @@ interface MembersPageProps {
 
 export default function MembersPage({ onSelect }: MembersPageProps = {}) {
   const { state, addMember, updateMember, deleteMember } = useApp();
+  const { canEdit, linkedMemberId } = useAuthContext();
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Member | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = React.useState<Member | undefined>(undefined);
@@ -110,15 +112,22 @@ export default function MembersPage({ onSelect }: MembersPageProps = {}) {
       <div className="mx-auto max-w-6xl p-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">成员</h1>
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            添加成员
-          </Button>
+          {canEdit && (
+            <Button onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              添加成员
+            </Button>
+          )}
         </div>
 
         {members.length === 0 ? (
           <div className="mt-6">
-            <EmptyState onAdd={openCreate} />
+            {canEdit ? <EmptyState onAdd={openCreate} /> : (
+              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-zinc-200 bg-white py-16 text-center">
+                <Users className="h-10 w-10 text-zinc-300 mb-3" />
+                <p className="text-sm font-medium text-zinc-900">还没有成员</p>
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -137,17 +146,20 @@ export default function MembersPage({ onSelect }: MembersPageProps = {}) {
                     onEdit={() => openEdit(m)}
                     onDelete={() => setDeleteTarget(m)}
                     onDragStart={(e) => handleDragStart(e, m.id)}
+                    canEdit={canEdit || linkedMemberId === m.id}
                   />
                 );
               })}
-              <button
-                type="button"
-                onClick={openCreate}
-                className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-200 bg-white py-8 text-zinc-400 hover:border-zinc-300 hover:text-zinc-600 transition-colors"
-              >
-                <Plus className="h-5 w-5" />
-                <span className="text-xs font-medium">添加成员</span>
-              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-200 bg-white py-8 text-zinc-400 hover:border-zinc-300 hover:text-zinc-600 transition-colors"
+                >
+                  <Plus className="h-5 w-5" />
+                  <span className="text-xs font-medium">添加成员</span>
+                </button>
+              )}
             </div>
 
             {/* Instrument boards */}
@@ -199,6 +211,7 @@ export default function MembersPage({ onSelect }: MembersPageProps = {}) {
                                 member={m}
                                 onRemove={() => removeInstrumentFromMember(m.id, inst)}
                                 onDragStart={(e) => handleDragStart(e, m.id)}
+                                canEdit={canEdit}
                               />
                             ))}
                           </div>
@@ -256,6 +269,7 @@ export default function MembersPage({ onSelect }: MembersPageProps = {}) {
                                 member={m}
                                 onRemove={() => removeRoleFromMember(m.id, role)}
                                 onDragStart={(e) => handleDragStart(e, m.id)}
+                                canEdit={canEdit}
                               />
                             ))}
                           </div>
@@ -306,33 +320,39 @@ interface MemberCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onDragStart: (e: React.DragEvent) => void;
+  canEdit: boolean;
 }
 
-function MemberCard({ member, songCount, roles, onSelect, onEdit, onDelete, onDragStart }: MemberCardProps) {
+function MemberCard({ member, songCount, roles, onSelect, onEdit, onDelete, onDragStart, canEdit }: MemberCardProps) {
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
+      draggable={canEdit}
+      onDragStart={canEdit ? onDragStart : undefined}
       onClick={onSelect}
-      className="group relative rounded-lg border border-zinc-200 bg-white p-4 shadow-sm hover:border-zinc-300 hover:shadow transition-all cursor-grab active:cursor-grabbing"
+      className={cn(
+        'group relative rounded-lg border border-zinc-200 bg-white p-4 shadow-sm hover:border-zinc-300 hover:shadow transition-all',
+        canEdit && 'cursor-grab active:cursor-grabbing',
+      )}
     >
       {/* Actions */}
-      <div className="absolute right-2 top-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-        >
-          <Pencil className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-red-600"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
-      </div>
+      {canEdit && (
+        <div className="absolute right-2 top-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className="flex h-6 w-6 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-red-600"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
+      )}
 
       {/* Name */}
       <p className="text-base font-medium text-zinc-900 pr-12">{member.name}</p>
@@ -392,24 +412,30 @@ interface BoardChipProps {
   member: Member;
   onRemove: () => void;
   onDragStart: (e: React.DragEvent) => void;
+  canEdit: boolean;
 }
 
-function BoardChip({ member, onRemove, onDragStart }: BoardChipProps) {
+function BoardChip({ member, onRemove, onDragStart, canEdit }: BoardChipProps) {
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
-      className="group flex items-center justify-between rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-800 hover:border-zinc-300 cursor-grab active:cursor-grabbing"
+      draggable={canEdit}
+      onDragStart={canEdit ? onDragStart : undefined}
+      className={cn(
+        'group flex items-center justify-between rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-800 hover:border-zinc-300',
+        canEdit && 'cursor-grab active:cursor-grabbing',
+      )}
     >
       <span>{member.name}</span>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="ml-1 flex h-3.5 w-3.5 items-center justify-center rounded text-zinc-400 opacity-0 hover:text-zinc-700 group-hover:opacity-100"
-        title="移除"
-      >
-        <X className="h-2.5 w-2.5" />
-      </button>
+      {canEdit && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="ml-1 flex h-3.5 w-3.5 items-center justify-center rounded text-zinc-400 opacity-0 hover:text-zinc-700 group-hover:opacity-100"
+          title="移除"
+        >
+          <X className="h-2.5 w-2.5" />
+        </button>
+      )}
     </div>
   );
 }

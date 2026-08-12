@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Users, Zap } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
+import { useAuthContext } from '@/store/AuthContext';
 import { cn } from '@/lib/utils';
 import { INSTRUMENT_META } from '@/lib/instruments';
 import type { Assignment, AssignmentStatus, Instrument, Member, Song, SongStatus } from '@/types';
@@ -58,6 +59,7 @@ interface MemberSongsPageProps {
 
 export default function MemberSongsPage({ onSelectMember }: MemberSongsPageProps = {}) {
   const { state, updateAssignment } = useApp();
+  const { canEdit, linkedMemberId } = useAuthContext();
   const [dragId, setDragId] = React.useState<string | null>(null);
   const [hiddenIds, setHiddenIds] = React.useState<Set<string>>(() => {
     try {
@@ -214,6 +216,7 @@ export default function MemberSongsPage({ onSelectMember }: MemberSongsPageProps
                     onDrop={handleDrop}
                     onToggleEmergency={(a) => updateAssignment({ ...a, isEmergency: !a.isEmergency })}
                     onSelectMember={onSelectMember}
+                    canEdit={canEdit || linkedMemberId === m.id}
                   />
                 ))}
               </div>
@@ -239,10 +242,11 @@ interface MemberColumnProps {
   onDrop: (memberId: string, target: AssignmentStatus) => void;
   onToggleEmergency: (a: Assignment) => void;
   onSelectMember?: (id: string) => void;
+  canEdit: boolean;
 }
 
 function MemberColumn({
-  member, cards, dragId, onDragStart, onDragEnd, onDrop, onToggleEmergency, onSelectMember,
+  member, cards, dragId, onDragStart, onDragEnd, onDrop, onToggleEmergency, onSelectMember, canEdit,
 }: MemberColumnProps) {
   const byStatus: Record<AssignmentStatus, CardData[]> = { want: [], practicing: [], mastered: [] };
   for (const c of cards) byStatus[statusOf(c.assignment)].push(c);
@@ -277,6 +281,7 @@ function MemberColumn({
             onDragEnd={onDragEnd}
             onDrop={onDrop}
             onToggleEmergency={onToggleEmergency}
+            canEdit={canEdit}
           />
         ))}
       </div>
@@ -297,9 +302,10 @@ interface StatusSectionProps {
   onDragEnd: () => void;
   onDrop: (memberId: string, target: AssignmentStatus) => void;
   onToggleEmergency: (a: Assignment) => void;
+  canEdit: boolean;
 }
 
-function StatusSection({ section, cards, memberId, dragId, onDragStart, onDragEnd, onDrop, onToggleEmergency }: StatusSectionProps) {
+function StatusSection({ section, cards, memberId, dragId, onDragStart, onDragEnd, onDrop, onToggleEmergency, canEdit }: StatusSectionProps) {
   const [isOver, setIsOver] = React.useState(false);
 
   return (
@@ -335,6 +341,7 @@ function StatusSection({ section, cards, memberId, dragId, onDragStart, onDragEn
               }}
               onDragEnd={onDragEnd}
               onToggleEmergency={() => onToggleEmergency(c.assignment)}
+              canEdit={canEdit}
             />
           ))
         )}
@@ -353,21 +360,23 @@ interface PillProps {
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   onToggleEmergency: () => void;
+  canEdit: boolean;
 }
 
-function Pill({ card, isDragging, onDragStart, onDragEnd, onToggleEmergency }: PillProps) {
+function Pill({ card, isDragging, onDragStart, onDragEnd, onToggleEmergency, canEdit }: PillProps) {
   const partMeta = INSTRUMENT_META[card.assignment.part];
   const emergency = card.assignment.isEmergency;
 
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
+      draggable={canEdit}
+      onDragStart={canEdit ? onDragStart : undefined}
       onDragEnd={onDragEnd}
-      onClick={onToggleEmergency}
-      title={`${card.song.title}${card.song.artist ? ` — ${card.song.artist}` : ''}\n${partMeta.label}${emergency ? ' (替补)' : ''}\n点击切换替补`}
+      onClick={canEdit ? onToggleEmergency : undefined}
+      title={`${card.song.title}${card.song.artist ? ` — ${card.song.artist}` : ''}\n${partMeta.label}${emergency ? ' (替补)' : ''}${canEdit ? '\n点击切换替补' : ''}`}
       className={cn(
-        'flex cursor-grab items-center gap-1 rounded border px-1.5 py-0.5 transition-opacity active:cursor-grabbing',
+        'flex items-center gap-1 rounded border px-1.5 py-0.5 transition-opacity',
+        canEdit && 'cursor-grab active:cursor-grabbing',
         emergency
           ? 'border-amber-200 bg-amber-50'
           : 'border-zinc-200 bg-white',

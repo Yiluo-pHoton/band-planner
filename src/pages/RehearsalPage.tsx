@@ -3,6 +3,7 @@ import { CalendarClock, CheckCircle2, ChevronDown, ExternalLink, GripVertical, H
 import { AttendanceBar } from '@/components/AttendanceBar';
 import { Button } from '@/components/ui/button';
 import { useApp } from '@/store/AppContext';
+import { useAuthContext } from '@/store/AuthContext';
 import { INSTRUMENTS, INSTRUMENT_META } from '@/lib/instruments';
 import { SONG_STATUS_META, SONG_STATUSES } from '@/lib/songStatus';
 import {
@@ -41,6 +42,7 @@ export default function RehearsalPage({
   onSelectSong,
 }: RehearsalPageProps) {
   const { state, addRehearsal, updateSong } = useApp();
+  const { canEdit } = useAuthContext();
   const [showReady, setShowReady] = React.useState(() => {
     try {
       return localStorage.getItem('band-planner:rehearsal-show-ready') !== 'false';
@@ -276,7 +278,7 @@ export default function RehearsalPage({
                   songs={filterReady(plan.A)}
                   attendingIds={attendingIds}
                   onSelect={onSelectSong}
-                  onAdd={addToRehearsed}
+                  onAdd={canEdit ? addToRehearsed : undefined}
                   rehearsedSet={rehearsedSet}
                 />
                 <BucketColumn
@@ -286,7 +288,7 @@ export default function RehearsalPage({
                   songs={filterReady(plan.B)}
                   attendingIds={attendingIds}
                   onSelect={onSelectSong}
-                  onAdd={addToRehearsed}
+                  onAdd={canEdit ? addToRehearsed : undefined}
                   rehearsedSet={rehearsedSet}
                 />
                 <BucketColumn
@@ -296,14 +298,14 @@ export default function RehearsalPage({
                   songs={filterReady(plan.C)}
                   attendingIds={attendingIds}
                   onSelect={onSelectSong}
-                  onAdd={addToRehearsed}
+                  onAdd={canEdit ? addToRehearsed : undefined}
                   rehearsedSet={rehearsedSet}
                   whatIfHints={whatIfHints}
                 />
               </div>
 
               {/* Rehearsed songs panel */}
-              <div
+              {canEdit && <div
                 className={cn(
                   'mt-5 rounded-xl border-2 border-dashed bg-white p-4 shadow-sm transition-colors',
                   rehearsedIds.length === 0 ? 'border-zinc-200' : 'border-zinc-300',
@@ -406,7 +408,7 @@ export default function RehearsalPage({
                     )}
                   </div>
                 )}
-              </div>
+              </div>}
             </>
           )}
         </div>

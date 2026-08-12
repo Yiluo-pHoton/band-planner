@@ -3,6 +3,7 @@ import { ArrowDownUp, CalendarX, ChevronLeft, ChevronRight, Download, RotateCcw 
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
+import { useAuthContext } from '@/store/AuthContext';
 import { cn, toLocalDateString } from '@/lib/utils';
 import { applySeedAvailability } from '@/lib/seedAvailability';
 import { ALL_WEEKDAYS, type WeekDay } from '@/lib/rehearsalDay';
@@ -39,6 +40,7 @@ function addDays(d: Date, n: number): Date {
 
 export default function AvailabilityPage() {
   const { state, setAvailability, setRehearsalDays, updateMember } = useApp();
+  const { canEdit, linkedMemberId } = useAuthContext();
   const rDays: WeekDay[] = (state.rehearsalDays ?? [6]) as WeekDay[];
   const rDaySet = React.useMemo(() => new Set(rDays), [rDays]);
   const [brush, setBrush] = React.useState<Brush>('unavailable');
@@ -145,34 +147,38 @@ export default function AvailabilityPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-zinc-500">排练日</span>
-              <div className="flex">
-                {ALL_WEEKDAYS.map((wd) => (
-                  <button
-                    key={wd.value}
-                    type="button"
-                    onClick={() => toggleRehearsalDay(wd.value)}
-                    className={cn(
-                      'border px-2 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md -ml-px first:ml-0',
-                      rDaySet.has(wd.value)
-                        ? 'border-zinc-900 bg-zinc-900 text-white z-10 relative'
-                        : 'border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50',
-                    )}
-                  >
-                    {wd.label.replace('周', '')}
-                  </button>
-                ))}
+            {canEdit && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-zinc-500">排练日</span>
+                <div className="flex">
+                  {ALL_WEEKDAYS.map((wd) => (
+                    <button
+                      key={wd.value}
+                      type="button"
+                      onClick={() => toggleRehearsalDay(wd.value)}
+                      className={cn(
+                        'border px-2 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md -ml-px first:ml-0',
+                        rDaySet.has(wd.value)
+                          ? 'border-zinc-900 bg-zinc-900 text-white z-10 relative'
+                          : 'border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50',
+                      )}
+                    >
+                      {wd.label.replace('周', '')}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
             <Button variant="secondary" onClick={sortByRehearsalDay}>
               <ArrowDownUp className="mr-1 h-4 w-4" />
               排序
             </Button>
-            <Button variant="secondary" onClick={() => setSeedConfirmOpen(true)}>
-              <Download className="mr-1 h-4 w-4" />
-              导入示例数据
-            </Button>
+            {canEdit && (
+              <Button variant="secondary" onClick={() => setSeedConfirmOpen(true)}>
+                <Download className="mr-1 h-4 w-4" />
+                导入示例数据
+              </Button>
+            )}
           </div>
         </div>
         {seedReport && (
@@ -288,12 +294,15 @@ export default function AvailabilityPage() {
                             <button
                               type="button"
                               onMouseDown={(e) => {
+                                const allowed = canEdit || linkedMemberId === m.id;
+                                if (!allowed) return;
                                 e.preventDefault();
                                 setPainting(true);
                                 paint(m.id, ds);
                               }}
                               onMouseEnter={() => {
-                                if (painting) paint(m.id, ds);
+                                const allowed = canEdit || linkedMemberId === m.id;
+                                if (allowed && painting) paint(m.id, ds);
                               }}
                               className={cn(
                                 'block h-6 w-full transition-colors',
@@ -324,6 +333,8 @@ export default function AvailabilityPage() {
               brush={brush}
               onUpdateMember={updateMember}
               onSetAvailability={setAvailability}
+              canEdit={canEdit}
+              linkedMemberId={linkedMemberId}
             />
           </>
         )}
@@ -376,12 +387,16 @@ function WeeklyDefaultsPanel({
   brush,
   onUpdateMember,
   onSetAvailability,
+  canEdit,
+  linkedMemberId,
 }: {
   members: Member[];
   dates: Date[];
   brush: Brush;
   onUpdateMember: (m: Member) => void;
   onSetAvailability: (memberId: string, date: string, status: Availability['status'] | null) => void;
+  canEdit: boolean;
+  linkedMemberId: string | undefined;
 }) {
   const [applyReport, setApplyReport] = React.useState<string | null>(null);
   const [painting, setPainting] = React.useState(false);
@@ -409,8 +424,9 @@ function WeeklyDefaultsPanel({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const futureDates = dates.filter((d) => d >= today);
+    const targets = canEdit ? members : members.filter((m) => m.id === linkedMemberId);
     let count = 0;
-    for (const m of members) {
+    for (const m of targets) {
       for (const d of futureDates) {
         const day = d.getDay() as WeekDay;
         const status = getDefault(m, day);
@@ -432,10 +448,12 @@ function WeeklyDefaultsPanel({
             点击或拖动设置状态（红=来不了 / 绿=能来 / 黄=不稳定），然后点"应用"覆盖到上方表格
           </p>
         </div>
-        <Button variant="secondary" size="sm" onClick={applyToFuture}>
-          <RotateCcw className="mr-1 h-3.5 w-3.5" />
-          应用到可见日期
-        </Button>
+        {(canEdit || linkedMemberId) && (
+          <Button variant="secondary" size="sm" onClick={applyToFuture}>
+            <RotateCcw className="mr-1 h-3.5 w-3.5" />
+            应用到可见日期
+          </Button>
+        )}
       </div>
       {applyReport && (
         <p className="mb-2 text-xs text-zinc-600">{applyReport}</p>
@@ -469,8 +487,8 @@ function WeeklyDefaultsPanel({
                     <td key={wd.value} className="p-0 border-b border-zinc-100">
                       <button
                         type="button"
-                        onMouseDown={(e) => { e.preventDefault(); setPainting(true); paintCell(m, wd.value); }}
-                        onMouseEnter={() => { if (painting) paintCell(m, wd.value); }}
+                        onMouseDown={(e) => { const ok = canEdit || linkedMemberId === m.id; if (!ok) return; e.preventDefault(); setPainting(true); paintCell(m, wd.value); }}
+                        onMouseEnter={() => { const ok = canEdit || linkedMemberId === m.id; if (ok && painting) paintCell(m, wd.value); }}
                         className={cn(
                           'block h-6 w-full transition-colors',
                           STATUS_STYLE[status],

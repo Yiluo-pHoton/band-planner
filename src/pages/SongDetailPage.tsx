@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { SongFormDialog } from '@/components/SongFormDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useApp } from '@/store/AppContext';
+import { useAuthContext } from '@/store/AuthContext';
 import { INSTRUMENT_META, INSTRUMENTS } from '@/lib/instruments';
 import { SONG_STATUS_META, SONG_STATUSES, isStatusAllowed } from '@/lib/songStatus';
 import type { SongStatus } from '@/types';
@@ -20,6 +21,7 @@ interface SongDetailPageProps {
 export default function SongDetailPage({ songId, onBack }: SongDetailPageProps) {
   const { state, updateSong, deleteSong, addAssignment, updateAssignment, deleteAssignment } =
     useApp();
+  const { canEdit } = useAuthContext();
   const [editOpen, setEditOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [dragMemberId, setDragMemberId] = React.useState<string | null>(null);
@@ -128,30 +130,41 @@ export default function SongDetailPage({ songId, onBack }: SongDetailPageProps) 
                     原创
                   </span>
                 )}
-                <div className="relative">
-                  <select
-                    value={song.status}
-                    disabled={song.status === 'writing'}
-                    onChange={(e) =>
-                      updateSong({ ...song, status: e.target.value as SongStatus })
-                    }
-                    title={song.status === 'writing' ? '作曲和作词都打钩后会自动进入下一阶段' : undefined}
+                {canEdit ? (
+                  <div className="relative">
+                    <select
+                      value={song.status}
+                      disabled={song.status === 'writing'}
+                      onChange={(e) =>
+                        updateSong({ ...song, status: e.target.value as SongStatus })
+                      }
+                      title={song.status === 'writing' ? '作曲和作词都打钩后会自动进入下一阶段' : undefined}
+                      className={cn(
+                        'appearance-none rounded-md border px-2 py-0.5 pr-6 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-zinc-400',
+                        song.status === 'writing' ? 'cursor-not-allowed' : 'cursor-pointer',
+                        SONG_STATUS_META[song.status].badge,
+                      )}
+                    >
+                      {SONG_STATUSES.filter((s) => song.kind === 'original' || s !== 'writing').map((s) => (
+                        <option key={s} value={s} disabled={!isStatusAllowed(s, missingParts)}>
+                          {SONG_STATUS_META[s].label}{!isStatusAllowed(s, missingParts) ? '（缺人）' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px]">
+                      ▾
+                    </span>
+                  </div>
+                ) : (
+                  <span
                     className={cn(
-                      'appearance-none rounded-md border px-2 py-0.5 pr-6 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-zinc-400',
-                      song.status === 'writing' ? 'cursor-not-allowed' : 'cursor-pointer',
+                      'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium',
                       SONG_STATUS_META[song.status].badge,
                     )}
                   >
-                    {SONG_STATUSES.filter((s) => song.kind === 'original' || s !== 'writing').map((s) => (
-                      <option key={s} value={s} disabled={!isStatusAllowed(s, missingParts)}>
-                        {SONG_STATUS_META[s].label}{!isStatusAllowed(s, missingParts) ? '（缺人）' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px]">
-                    ▾
+                    {SONG_STATUS_META[song.status].label}
                   </span>
-                </div>
+                )}
               </div>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight truncate">{song.title}</h1>
               {song.artist && <p className="mt-1 text-sm text-zinc-500">{song.artist}</p>}
@@ -161,14 +174,16 @@ export default function SongDetailPage({ songId, onBack }: SongDetailPageProps) 
                 </p>
               )}
             </div>
-            <div className="flex shrink-0 gap-1">
-              <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
-                <Pencil className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="h-4 w-4 text-red-600" />
-              </Button>
-            </div>
+            {canEdit && (
+              <div className="flex shrink-0 gap-1">
+                <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => setDeleteOpen(true)}>
+                  <Trash2 className="h-4 w-4 text-red-600" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -214,15 +229,19 @@ export default function SongDetailPage({ songId, onBack }: SongDetailPageProps) 
                       <span className={cn('inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium', tone)}>
                         {kind === 'composer' ? '作曲' : '作词'}
                       </span>
-                      <label className="flex cursor-pointer items-center gap-1.5 text-xs text-zinc-600 select-none">
-                        <input
-                          type="checkbox"
-                          checked={ready}
-                          onChange={toggleReady}
-                          className="h-3.5 w-3.5 cursor-pointer accent-emerald-600"
-                        />
-                        完成
-                      </label>
+                      {canEdit ? (
+                        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-zinc-600 select-none">
+                          <input
+                            type="checkbox"
+                            checked={ready}
+                            onChange={toggleReady}
+                            className="h-3.5 w-3.5 cursor-pointer accent-emerald-600"
+                          />
+                          完成
+                        </label>
+                      ) : ready ? (
+                        <span className="text-xs text-emerald-600 font-medium">已完成</span>
+                      ) : null}
                     </div>
                     <div className="min-h-[4.5rem] space-y-1.5 p-2.5">
                       {ids.length === 0 ? (
@@ -236,14 +255,16 @@ export default function SongDetailPage({ songId, onBack }: SongDetailPageProps) 
                             className="group flex items-center justify-between gap-1 rounded border border-zinc-200 bg-white px-2 py-1 text-sm"
                           >
                             <span className="truncate font-medium">{memberName(id)}</span>
-                            <button
-                              type="button"
-                              onClick={() => removeCredit(kind, id)}
-                              className="rounded p-0.5 text-zinc-400 opacity-0 hover:bg-zinc-100 hover:text-red-600 group-hover:opacity-100"
-                              title="移除"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => removeCredit(kind, id)}
+                                className="rounded p-0.5 text-zinc-400 opacity-0 hover:bg-zinc-100 hover:text-red-600 group-hover:opacity-100"
+                                title="移除"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
                         ))
                       )}
@@ -332,29 +353,42 @@ export default function SongDetailPage({ songId, onBack }: SongDetailPageProps) 
                               : 'border-zinc-200 bg-white',
                           )}
                         >
-                          <button
-                            type="button"
-                            className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-                            onClick={() =>
-                              updateAssignment({ ...a, isEmergency: !a.isEmergency })
-                            }
-                            title={a.isEmergency ? '点击 → 设为正式' : '点击 → 设为替补'}
-                          >
-                            <span className="truncate font-medium">
-                              {memberName(a.memberId)}
-                            </span>
-                            {a.isEmergency && (
-                              <Zap className="h-3 w-3 shrink-0 text-amber-600" />
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteAssignment(a.id)}
-                            className="rounded p-0.5 text-zinc-400 opacity-0 hover:bg-zinc-100 hover:text-red-600 group-hover:opacity-100"
-                            title="删除"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                              onClick={() =>
+                                updateAssignment({ ...a, isEmergency: !a.isEmergency })
+                              }
+                              title={a.isEmergency ? '点击 → 设为正式' : '点击 → 设为替补'}
+                            >
+                              <span className="truncate font-medium">
+                                {memberName(a.memberId)}
+                              </span>
+                              {a.isEmergency && (
+                                <Zap className="h-3 w-3 shrink-0 text-amber-600" />
+                              )}
+                            </button>
+                          ) : (
+                            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                              <span className="truncate font-medium">
+                                {memberName(a.memberId)}
+                              </span>
+                              {a.isEmergency && (
+                                <Zap className="h-3 w-3 shrink-0 text-amber-600" />
+                              )}
+                            </div>
+                          )}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => deleteAssignment(a.id)}
+                              className="rounded p-0.5 text-zinc-400 opacity-0 hover:bg-zinc-100 hover:text-red-600 group-hover:opacity-100"
+                              title="删除"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
                       ))
                     )}
@@ -365,7 +399,7 @@ export default function SongDetailPage({ songId, onBack }: SongDetailPageProps) 
           </div>
 
           {/* Member pool — grouped by required part of this song */}
-          <div className="sticky bottom-4 mt-6 rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-md backdrop-blur">
+          {canEdit && <div className="sticky bottom-4 mt-6 rounded-xl border border-zinc-200 bg-white/95 p-4 shadow-md backdrop-blur">
             <div className="mb-3 flex items-baseline justify-between">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 成员池
@@ -449,7 +483,7 @@ export default function SongDetailPage({ songId, onBack }: SongDetailPageProps) 
                 </div>
               );
             })()}
-          </div>
+          </div>}
         </div>
       </div>
 
