@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { Assignment, Availability, Member, PersistedState, Rehearsal, Show, Song } from '@/types';
+import type { Assignment, Availability, Member, PersistedState, Rehearsal, Show, Song, SongOpinionType } from '@/types';
 import { loadState, saveState, saveToFirestore, subscribeFirestore } from '@/store/persist';
 
 // Action types are union-typed so the reducer is exhaustive.
@@ -22,6 +22,7 @@ type Action =
   | { type: 'shows/add'; show: Show }
   | { type: 'shows/update'; show: Show }
   | { type: 'shows/delete'; id: string }
+  | { type: 'songOpinions/set'; songId: string; memberId: string; opinion: SongOpinionType | null }
   | { type: 'settings/rehearsalDays'; days: number[] }
   | { type: 'sync'; state: PersistedState };
 
@@ -62,11 +63,12 @@ function reducer(state: PersistedState, action: Action): PersistedState {
     }
 
     case 'songs/delete':
-      // Cascade: drop assignments that reference this song + remove from show setlists.
+      // Cascade: drop assignments + opinions that reference this song + remove from show setlists.
       return {
         ...state,
         songs: state.songs.filter((s) => s.id !== action.id),
         assignments: state.assignments.filter((a) => a.songId !== action.id),
+        songOpinions: (state.songOpinions ?? []).filter((o) => o.songId !== action.id),
         shows: state.shows.map((sh) =>
           sh.setlistSongIds.includes(action.id)
             ? { ...sh, setlistSongIds: sh.setlistSongIds.filter((sid) => sid !== action.id) }
@@ -92,12 +94,13 @@ function reducer(state: PersistedState, action: Action): PersistedState {
     }
 
     case 'members/delete':
-      // Cascade: drop assignments + availability + composer/lyricist refs + show performer refs.
+      // Cascade: drop assignments + availability + opinions + composer/lyricist refs + show performer refs.
       return {
         ...state,
         members: state.members.filter((m) => m.id !== action.id),
         assignments: state.assignments.filter((a) => a.memberId !== action.id),
         availability: state.availability.filter((av) => av.memberId !== action.id),
+        songOpinions: (state.songOpinions ?? []).filter((o) => o.memberId !== action.id),
         songs: state.songs.map((s) => {
           const hasC = s.composerIds?.includes(action.id);
           const hasL = s.lyricistIds?.includes(action.id);
@@ -184,6 +187,21 @@ function reducer(state: PersistedState, action: Action): PersistedState {
     case 'shows/delete':
       return { ...state, shows: state.shows.filter((sh) => sh.id !== action.id) };
 
+    case 'songOpinions/set': {
+      const opinions = (state.songOpinions ?? []).filter(
+        (o) => !(o.songId === action.songId && o.memberId === action.memberId),
+      );
+      if (action.opinion !== null) {
+        opinions.push({
+          id: crypto.randomUUID(),
+          songId: action.songId,
+          memberId: action.memberId,
+          opinion: action.opinion,
+        });
+      }
+      return { ...state, songOpinions: opinions };
+    }
+
     case 'settings/rehearsalDays':
       return { ...state, rehearsalDays: action.days };
 
@@ -215,6 +233,7 @@ interface AppContextValue {
   addShow: (show: Show) => void;
   updateShow: (show: Show) => void;
   deleteShow: (id: string) => void;
+  setSongOpinion: (songId: string, memberId: string, opinion: SongOpinionType | null) => void;
   setRehearsalDays: (days: number[]) => void;
 }
 
@@ -288,6 +307,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addShow: (show) => dispatch({ type: 'shows/add', show }),
       updateShow: (show) => dispatch({ type: 'shows/update', show }),
       deleteShow: (id) => dispatch({ type: 'shows/delete', id }),
+      setSongOpinion: (songId, memberId, opinion) =>
+        dispatch({ type: 'songOpinions/set', songId, memberId, opinion }),
       setRehearsalDays: (days) => dispatch({ type: 'settings/rehearsalDays', days }),
     }),
     [state],

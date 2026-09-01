@@ -1,10 +1,10 @@
 import * as React from 'react';
-import { CalendarCheck, CalendarRange, ClipboardList, Download, History, ListMusic, LogIn, LogOut, Mail, Music, Shield, Ticket, Upload, Users, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, CalendarRange, ClipboardList, Download, History, ListMusic, LogIn, LogOut, Mail, Music, Shield, Table2, Ticket, Upload, Users, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { exportAllData, importAllData } from '@/lib/dataTransfer';
 import { useAuthContext } from '@/store/AuthContext';
 
-export type TabKey = 'songs' | 'members' | 'memberSongs' | 'availability' | 'rehearsal' | 'history' | 'shows' | 'whoNeeds' | 'admin';
+export type TabKey = 'songs' | 'members' | 'memberSongs' | 'availability' | 'rehearsal' | 'history' | 'shows' | 'whoNeeds' | 'matrix' | 'admin';
 
 interface NavItem {
   key: TabKey;
@@ -142,24 +142,40 @@ export function Sidebar({ active, onChange, onDataImported }: SidebarProps) {
           </button>
         )}
 
-        {role === 'admin' && (
+        {(role === 'admin' || role === 'director') && (
           <>
             <div className="my-2 border-t border-zinc-100" />
             <button
               type="button"
-              onClick={() => onChange('admin')}
-              title="用户管理"
+              onClick={() => onChange('matrix')}
+              title="曲目矩阵"
               className={cn(
                 'flex w-full items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium transition-colors lg:justify-start lg:px-3',
-                active === 'admin'
+                active === 'matrix'
                   ? 'bg-zinc-100 text-zinc-900'
                   : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900',
               )}
             >
-              <Shield className="h-4 w-4 shrink-0" />
-              <span className="hidden lg:inline">用户管理</span>
+              <Table2 className="h-4 w-4 shrink-0" />
+              <span className="hidden lg:inline">曲目矩阵</span>
             </button>
           </>
+        )}
+        {role === 'admin' && (
+          <button
+            type="button"
+            onClick={() => onChange('admin')}
+            title="用户管理"
+            className={cn(
+              'flex w-full items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium transition-colors lg:justify-start lg:px-3',
+              active === 'admin'
+                ? 'bg-zinc-100 text-zinc-900'
+                : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900',
+            )}
+          >
+            <Shield className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">用户管理</span>
+          </button>
         )}
       </nav>
 

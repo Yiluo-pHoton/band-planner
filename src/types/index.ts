@@ -89,6 +89,15 @@ export interface Show {
   createdAt: string;            // ISO 8601 datetime
 }
 
+export type SongOpinionType = 'like' | 'dislike' | 'hard';
+
+export interface SongOpinion {
+  id: string;
+  songId: string;              // FK -> Song.id
+  memberId: string;            // FK -> Member.id
+  opinion: SongOpinionType;
+}
+
 export interface PersistedState {
   schemaVersion: number;
   songs: Song[];
@@ -97,5 +106,6 @@ export interface PersistedState {
   rehearsals: Rehearsal[];
   availability: Availability[];
   shows: Show[];
-  rehearsalDays?: number[];    // each 0=Sun .. 6=Sat; absent => [6] (Saturday)
+  songOpinions?: SongOpinion[];  // optional for backward compat
+  rehearsalDays?: number[];      // each 0=Sun .. 6=Sat; absent => [6] (Saturday)
 }
