@@ -102,15 +102,22 @@ function AssignPopover({ song, assignments, members, onAdd, onDelete, onClose, a
     return members.filter((m) => m.instruments.includes(part));
   }
 
-  // Position the popover below the anchor, clamped to viewport
-  const top = anchorRect.bottom + 4;
+  // Position the popover, flipping above the anchor if not enough space below
+  const popoverHeight = 280; // approximate max height
+  const spaceBelow = window.innerHeight - anchorRect.bottom - 8;
+  const spaceAbove = anchorRect.top - 8;
+  const showAbove = spaceBelow < popoverHeight && spaceAbove > spaceBelow;
+  const top = showAbove
+    ? Math.max(8, anchorRect.top - popoverHeight - 4)
+    : anchorRect.bottom + 4;
+  const maxH = showAbove ? spaceAbove : spaceBelow;
   const left = Math.max(8, Math.min(anchorRect.left, window.innerWidth - 320));
 
   return (
     <div
       ref={popoverRef}
-      className="fixed z-50 w-[18rem] rounded-lg border border-zinc-200 bg-white shadow-xl"
-      style={{ top, left }}
+      className="fixed z-50 w-[18rem] rounded-lg border border-zinc-200 bg-white shadow-xl overflow-hidden flex flex-col"
+      style={{ top, left, maxHeight: Math.min(maxH, popoverHeight) }}
     >
       <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2">
         <div className="min-w-0">
@@ -121,7 +128,7 @@ function AssignPopover({ song, assignments, members, onAdd, onDelete, onClose, a
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="max-h-64 overflow-y-auto p-2 space-y-1.5">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
         {partSlots.map(({ part, slotIdx }) => {
           const partAssigns = assignmentsForPart(part);
           const assigned = partAssigns[slotIdx];
@@ -168,6 +175,48 @@ function AssignPopover({ song, assignments, members, onAdd, onDelete, onClose, a
         {partSlots.length === 0 && (
           <p className="text-xs text-zinc-400 py-2 text-center">没有需求声部</p>
         )}
+        {/* Orphaned assignments: more assignments for a part than the song requires */}
+        {(() => {
+          const slotCounts = new Map<Instrument, number>();
+          for (const part of song.requiredParts) {
+            slotCounts.set(part, (slotCounts.get(part) ?? 0) + 1);
+          }
+          const orphaned = songAssignments.filter((a) => {
+            const slots = slotCounts.get(a.part) ?? 0;
+            if (slots === 0) return true;
+            const allForPart = songAssignments.filter((x) => x.part === a.part);
+            const idx = allForPart.indexOf(a);
+            return idx >= slots;
+          });
+          if (orphaned.length === 0) return null;
+          return (
+            <>
+              <div className="mt-2 border-t border-zinc-100 pt-2">
+                <p className="text-[10px] text-amber-600 font-medium mb-1">多余分配（超出声部需求）</p>
+                {orphaned.map((a) => {
+                  const member = members.find((m) => m.id === a.memberId);
+                  const meta = INSTRUMENT_META[a.part];
+                  return (
+                    <div key={a.id} className="flex items-center gap-2 py-0.5">
+                      <span className={cn('shrink-0 rounded border px-1 py-0.5 text-[9px] font-bold', meta.badge)}>
+                        {meta.abbrev}
+                      </span>
+                      <span className="flex-1 text-xs text-zinc-700">{member?.name ?? '?'}</span>
+                      <button
+                        type="button"
+                        onClick={() => onDelete(a.id)}
+                        className="shrink-0 rounded p-0.5 text-zinc-400 hover:text-red-600"
+                        title="删除此分配"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
       </div>
     </div>
   );
@@ -191,6 +240,9 @@ export default function SongMatrixPage() {
   const [sortKey, setSortKey] = React.useState<SortKey>('custom');
   const [dragIdx, setDragIdx] = React.useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = React.useState<number | null>(null);
+
+  // Member highlight: click a member name to sort their songs to the top
+  const [highlightMemberId, setHighlightMemberId] = React.useState<string | null>(null);
 
   // Assignment popover
   const [popoverSongId, setPopoverSongId] = React.useState<string | null>(null);
@@ -281,11 +333,6 @@ export default function SongMatrixPage() {
     });
   }, [state.songs, sortKey, customOrder]);
 
-  const visibleSongs = React.useMemo(
-    () => sortedSongs.filter((s) => !hiddenSongIds.has(s.id)),
-    [sortedSongs, hiddenSongIds],
-  );
-
   // Assignment lookup: `songId|memberId` -> 'regular' | 'emergency'
   // A member with both regular and emergency assignments for the same song counts as regular.
   const assignmentMap = React.useMemo(() => {
@@ -300,6 +347,17 @@ export default function SongMatrixPage() {
     }
     return map;
   }, [state.assignments]);
+
+  const visibleSongs = React.useMemo(() => {
+    const filtered = sortedSongs.filter((s) => !hiddenSongIds.has(s.id));
+    if (!highlightMemberId) return filtered;
+    // Sort: songs this member participates in come first
+    return [...filtered].sort((a, b) => {
+      const aHas = assignmentMap.has(`${a.id}|${highlightMemberId}`) ? 0 : 1;
+      const bHas = assignmentMap.has(`${b.id}|${highlightMemberId}`) ? 0 : 1;
+      return aHas - bHas;
+    });
+  }, [sortedSongs, hiddenSongIds, highlightMemberId, assignmentMap]);
 
   // Opinion lookup: `songId|memberId` -> opinion
   const opinionMap = React.useMemo(() => {
@@ -440,11 +498,21 @@ export default function SongMatrixPage() {
                         className={cn(
                           'px-1 py-1.5 text-center font-normal border-b border-zinc-200 min-w-[3rem]',
                           isGroupStart && i > 0 && 'border-l-2 border-l-zinc-300',
+                          highlightMemberId === m.id && 'bg-zinc-100',
                         )}
                       >
-                        <div className="text-[10px] font-medium text-zinc-900 truncate max-w-[3.5rem] mx-auto">
+                        <button
+                          type="button"
+                          onClick={() => setHighlightMemberId(highlightMemberId === m.id ? null : m.id)}
+                          className={cn(
+                            'text-[10px] font-medium truncate max-w-[3.5rem] mx-auto cursor-pointer',
+                            highlightMemberId === m.id
+                              ? 'text-zinc-900 underline'
+                              : 'text-zinc-900 hover:text-zinc-600 hover:underline',
+                          )}
+                        >
                           {m.name}
-                        </div>
+                        </button>
                         {meta && (
                           <span className={cn('inline-block rounded px-0.5 text-[7px] font-bold mt-0.5', meta.badge)}>
                             {meta.abbrev}
