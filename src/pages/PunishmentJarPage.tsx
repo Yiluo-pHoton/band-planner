@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Check, CircleHelp, Dices, Eye, Pencil, Plus, Trash2, Undo2 } from 'lucide-react';
+import { Check, CircleHelp, Eye, Pencil, Plus, Trash2, Undo2 } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
 import { useAuthContext } from '@/store/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -15,93 +15,170 @@ import {
 } from '@/components/ui/dialog';
 import type { Punishment } from '@/types';
 
-// ─── Jar visual ────────────────────────────────────────────────
+// ─── Gacha machine visual ──────────────────────────────────────
 
-const SLIP_FILLS = [
+const CARD_FILLS = [
   '#fb7185', '#fbbf24', '#34d399', '#38bdf8',
   '#a78bfa', '#f472b6', '#2dd4bf', '#fb923c',
 ];
 
-function JarVisual({ slipCount, shaking }: { slipCount: number; shaking: boolean }) {
-  const slips = React.useMemo(() => {
-    const result: { fill: string; x: number; y: number; rotate: number; delay: number; width: number }[] = [];
-    const count = Math.min(slipCount, 18);
+function seededRandom(seed: number): () => number {
+  let s = seed;
+  return () => {
+    s = (s * 16807 + 0) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
+function GachaMachine({ slipCount, shaking, onDraw, disabled }: {
+  slipCount: number; shaking: boolean; onDraw: () => void; disabled: boolean;
+}) {
+  const cards = React.useMemo(() => {
+    const rand = seededRandom(42);
+    const result: {
+      fill: string; x: number; y: number; rotate: number;
+      delay: number; animIdx: number;
+    }[] = [];
+    const count = Math.min(slipCount, 15);
     for (let i = 0; i < count; i++) {
-      const seed = (i * 7 + 3) % 100;
-      const row = Math.floor(i / 3);
-      const col = i % 3;
+      const r1 = rand(), r2 = rand(), r3 = rand(), r4 = rand();
       result.push({
-        fill: SLIP_FILLS[i % SLIP_FILLS.length]!,
-        x: 58 + col * 26 + (seed % 14) - 6,
-        y: 185 - row * 16 - (seed % 6),
-        rotate: -30 + (seed % 60),
-        delay: (i * 0.4) % 2.5,
-        width: 30 + (seed % 10),
+        fill: CARD_FILLS[i % CARD_FILLS.length]!,
+        x: 64 + r1 * 124,
+        y: 22 + r2 * 58,
+        rotate: -25 + r3 * 50,
+        delay: r4 * 5,
+        animIdx: i % 4,
       });
     }
     return result;
   }, [slipCount]);
 
+  const face = slipCount === 0 ? 'empty' : slipCount < 5 ? 'happy' : 'full';
+
   return (
-    <div className={`relative mx-auto transition-transform ${shaking ? 'animate-jar-shake' : ''}`}>
-      <svg viewBox="0 0 200 230" width="160" height="184" className="mx-auto" aria-label="Punishment jar">
+    <div className={`relative mx-auto w-full max-w-lg transition-transform ${shaking ? 'animate-machine-shake' : ''}`}>
+      <svg viewBox="0 0 260 280" className="w-full h-auto" aria-label="Punishment gacha machine">
         <defs>
-          <clipPath id="jarClip">
-            <path d="M54,72 L48,200 Q48,212 100,212 Q152,212 152,200 L146,72 Z" />
+          <clipPath id="domeClip">
+            <path d="M55,100 L55,52 Q55,14 130,14 Q205,14 205,52 L205,100 Z" />
           </clipPath>
         </defs>
 
-        {/* Lid knob */}
-        <rect x="88" y="28" width="24" height="10" rx="5" fill="#d4d4d8" stroke="#a1a1aa" strokeWidth="1.5" />
-
-        {/* Lid body */}
-        <rect x="68" y="36" width="64" height="14" rx="3" fill="#d4d4d8" stroke="#a1a1aa" strokeWidth="1.5" />
-
-        {/* Jar neck */}
+        {/* ── Dome ── */}
         <path
-          d="M64,50 L64,72 L136,72 L136,50 Z"
-          fill="#fafafa"
-          stroke="#d4d4d8"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
+          d="M55,100 L55,52 Q55,14 130,14 Q205,14 205,52 L205,100 Z"
+          fill="#18181b" stroke="#fbbf24" strokeWidth="2"
+        />
+        {/* Dome glass */}
+        <path
+          d="M60,98 L60,54 Q60,20 130,20 Q200,20 200,54 L200,98 Z"
+          fill="#312e81" opacity="0.2"
         />
 
-        {/* Rim ring */}
-        <rect x="58" y="66" width="84" height="8" rx="3" fill="none" stroke="#d4d4d8" strokeWidth="1.5" />
-
-        {/* Jar body */}
-        <path
-          d="M54,72 L48,200 Q48,212 100,212 Q152,212 152,200 L146,72 Z"
-          fill="#fafafa"
-          stroke="#d4d4d8"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-
-        {/* Paper slips (clipped inside jar) */}
-        <g clipPath="url(#jarClip)">
-          {slips.map((slip, i) => (
-            <rect
-              key={i}
-              x={slip.x}
-              y={slip.y}
-              width={slip.width}
-              height={7}
-              rx={1.5}
-              fill={slip.fill}
-              opacity={0.8}
-              transform={`rotate(${slip.rotate}, ${slip.x + slip.width / 2}, ${slip.y + 3.5})`}
-              style={{
-                animation: `slip-float 3s ease-in-out ${slip.delay}s infinite alternate`,
-              }}
-            />
-          ))}
+        {/* Cards inside dome */}
+        <g clipPath="url(#domeClip)">
+          {cards.map((card, i) => {
+            const cx = card.x + 10;
+            const cy = card.y + 13;
+            return (
+              <g
+                key={i}
+                transform={`rotate(${card.rotate}, ${cx}, ${cy})`}
+                className={`animate-card-float-${card.animIdx}`}
+                style={{ animationDelay: `${card.delay}s` }}
+              >
+                <rect
+                  x={card.x} y={card.y}
+                  width="20" height="26"
+                  rx="3" fill={card.fill} opacity="0.88"
+                />
+                <text
+                  x={cx} y={cy + 4}
+                  textAnchor="middle" fontSize="12"
+                  fill="#fff" opacity="0.5" fontWeight="bold"
+                >?</text>
+              </g>
+            );
+          })}
         </g>
+
+        {/* Gold trim band */}
+        <rect x="46" y="97" width="168" height="6" rx="1" fill="#fbbf24" />
+
+        {/* ── Machine body ── */}
+        <rect x="46" y="103" width="168" height="140" rx="6" fill="#18181b" />
+
+        {/* Red warning stripe */}
+        <rect x="46" y="103" width="168" height="4" rx="1" fill="#dc2626" opacity="0.7" />
+
+        {/* Face panel */}
+        <rect x="66" y="120" width="128" height="58" rx="10" fill="#27272a" />
+
+        {/* Face — mischievous machine personality */}
+        {face === 'empty' && (
+          <>
+            <path d="M100,144 Q107,139 114,144" fill="none" stroke="#52525b" strokeWidth="2" strokeLinecap="round" />
+            <path d="M146,144 Q153,139 160,144" fill="none" stroke="#52525b" strokeWidth="2" strokeLinecap="round" />
+            <path d="M120,160 Q130,164 140,160" fill="none" stroke="#52525b" strokeWidth="1.5" strokeLinecap="round" />
+          </>
+        )}
+        {face === 'happy' && (
+          <>
+            <circle cx="108" cy="142" r="3.5" fill="#fbbf24" />
+            <circle cx="152" cy="142" r="3.5" fill="#fbbf24" />
+            <circle cx="109.2" cy="141" r="1.2" fill="#fff" opacity="0.7" />
+            <circle cx="153.2" cy="141" r="1.2" fill="#fff" opacity="0.7" />
+            {/* Raised brow */}
+            <path d="M98,133 Q108,128 118,133" fill="none" stroke="#fbbf24" strokeWidth="1.5" strokeLinecap="round" />
+            {/* Smirk */}
+            <path d="M116,160 Q130,170 144,160" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" />
+          </>
+        )}
+        {face === 'full' && (
+          <>
+            <path d="M98,143 Q108,136 118,143" fill="none" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" />
+            <path d="M142,143 Q152,136 162,143" fill="none" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" />
+            {/* Evil grin */}
+            <path d="M112,158 Q130,174 148,158" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />
+          </>
+        )}
+
+        {/* PUNISHMENT label */}
+        <text x="130" y="198" textAnchor="middle" fontSize="8" fill="#ef4444" fontWeight="bold" letterSpacing="3" opacity="0.75">PUNISHMENT</text>
+
+        {/* Small decorative skulls */}
+        <text x="72" y="198.5" fontSize="9" fill="#52525b" opacity="0.45">&#9760;</text>
+        <text x="178" y="198.5" fontSize="9" fill="#52525b" opacity="0.45">&#9760;</text>
+
+        {/* Knob — interactive draw trigger */}
+        <g
+          onClick={disabled ? undefined : onDraw}
+          style={{ cursor: disabled ? 'default' : 'pointer' }}
+          opacity={disabled ? 0.4 : 1}
+          className={shaking ? 'animate-knob-spin' : ''}
+        >
+          <circle cx="166" cy="222" r="16" fill="#fbbf24" stroke="#d97706" strokeWidth="2" />
+          <circle cx="166" cy="222" r="5.5" fill="#18181b" />
+          <path d="M166,210.5 L170,215 L162,215 Z" fill="#18181b" />
+        </g>
+        {/* Coin slot */}
+        <rect x="76" y="220" width="22" height="4" rx="2" fill="#3f3f46" />
+
+        {/* Lightning bolt accents */}
+        <polygon points="52,111 55,118 52,118 55,125" fill="#fbbf24" opacity="0.35" />
+        <polygon points="205,111 208,118 205,118 208,125" fill="#fbbf24" opacity="0.35" />
+
+        {/* ── Dispenser chute ── */}
+        <path
+          d="M105,243 L105,252 Q105,258 112,258 L148,258 Q155,258 155,252 L155,243"
+          fill="#27272a" stroke="#3f3f46" strokeWidth="1"
+        />
+        <rect x="110" y="241" width="40" height="5" rx="2" fill="#09090b" />
       </svg>
 
-      {/* Count label */}
       <p className="mt-1 text-center text-sm text-zinc-500">
-        {slipCount > 0 ? `${slipCount} 张纸条` : '空空如也'}
+        {slipCount > 0 ? `${slipCount} 张罚单` : '空空如也'}
       </p>
     </div>
   );
@@ -117,27 +194,27 @@ function DrawnResultCard({
   onDismiss: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fade-in">
-      <div className="animate-slip-reveal mx-4 max-w-sm w-full rounded-xl bg-white p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-fade-in">
+      <div className="animate-card-reveal mx-4 max-w-sm w-full rounded-xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl">
         <div className="flex items-center gap-2 mb-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-amber-600">
-            抽中了！
+          <p className="text-xs font-medium uppercase tracking-widest text-red-500">
+            &#9760; 抽中了！
           </p>
           {punishment.isHiddenTask && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-medium text-violet-300">
               <Eye className="h-3 w-3" />
               隐藏任务
             </span>
           )}
         </div>
-        <p className="text-lg font-semibold text-zinc-900 mb-4 leading-relaxed">
+        <p className="text-lg font-semibold text-zinc-100 mb-4 leading-relaxed">
           {punishment.text}
         </p>
-        <p className="text-sm text-zinc-500 mb-5">
+        <p className="text-sm text-zinc-400 mb-5">
           提交者：{punishment.submitterName}
         </p>
         <Button onClick={onDismiss} className="w-full">
-          好的
+          认罚
         </Button>
       </div>
     </div>
@@ -232,24 +309,52 @@ export default function PunishmentJarPage() {
     <>
       {/* Inline keyframes */}
       <style>{`
-        @keyframes jar-shake {
-          0%, 100% { transform: rotate(0deg); }
-          10% { transform: rotate(-4deg); }
-          20% { transform: rotate(4deg); }
-          30% { transform: rotate(-4deg); }
-          40% { transform: rotate(4deg); }
-          50% { transform: rotate(-2deg); }
-          60% { transform: rotate(2deg); }
-          70% { transform: rotate(-2deg); }
-          80% { transform: rotate(1deg); }
-          90% { transform: rotate(-1deg); }
+        /* Knob spin while drawing */
+        @keyframes knob-spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
         }
-        .animate-jar-shake { animation: jar-shake 0.6s ease-in-out infinite; }
+        .animate-knob-spin {
+          transform-origin: 166px 222px;
+          animation: knob-spin 0.4s linear infinite;
+        }
 
-        @keyframes slip-float {
-          0% { transform: translateY(0) rotate(var(--rotate, 0deg)); }
-          100% { transform: translateY(-6px) rotate(calc(var(--rotate, 0deg) + 3deg)); }
+        /* Machine shake — rumble effect */
+        @keyframes machine-shake {
+          0%, 100% { transform: translateX(0); }
+          10% { transform: translateX(-3px) rotate(-0.5deg); }
+          20% { transform: translateX(3px) rotate(0.5deg); }
+          30% { transform: translateX(-3px) rotate(-0.5deg); }
+          40% { transform: translateX(3px) rotate(0.5deg); }
+          50% { transform: translateX(-2px); }
+          60% { transform: translateX(2px); }
+          70% { transform: translateX(-1px); }
+          80% { transform: translateX(1px); }
+          90% { transform: translateX(-0.5px); }
         }
+        .animate-machine-shake { animation: machine-shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite; }
+
+        /* Card floating in dome — gentle drift */
+        @keyframes card-float-0 {
+          0%, 100% { transform: translate(0, 0) rotate(0deg); }
+          50% { transform: translate(2px, -3px) rotate(2deg); }
+        }
+        @keyframes card-float-1 {
+          0%, 100% { transform: translate(0, 0) rotate(0deg); }
+          50% { transform: translate(-2px, -2px) rotate(-2deg); }
+        }
+        @keyframes card-float-2 {
+          0%, 100% { transform: translate(0, 0) rotate(0deg); }
+          50% { transform: translate(1px, -4px) rotate(1.5deg); }
+        }
+        @keyframes card-float-3 {
+          0%, 100% { transform: translate(0, 0) rotate(0deg); }
+          50% { transform: translate(-1.5px, -2.5px) rotate(-1.5deg); }
+        }
+        .animate-card-float-0 { animation: card-float-0 4.5s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+        .animate-card-float-1 { animation: card-float-1 5s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+        .animate-card-float-2 { animation: card-float-2 5.5s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+        .animate-card-float-3 { animation: card-float-3 6s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
 
         @keyframes fade-in {
           from { opacity: 0; }
@@ -257,35 +362,32 @@ export default function PunishmentJarPage() {
         }
         .animate-fade-in { animation: fade-in 0.3s ease-out; }
 
-        @keyframes slip-reveal {
-          0% { opacity: 0; transform: translateY(40px) scale(0.8) rotate(-5deg); }
-          60% { transform: translateY(-8px) scale(1.02) rotate(1deg); }
-          100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+        /* Card reveal — flip/pop effect */
+        @keyframes card-reveal {
+          0% { opacity: 0; transform: translateY(60px) scale(0.6) rotateY(90deg); }
+          50% { transform: translateY(-8px) scale(1.04) rotateY(0deg); }
+          100% { opacity: 1; transform: translateY(0) scale(1) rotateY(0deg); }
         }
-        .animate-slip-reveal { animation: slip-reveal 0.5s ease-out; }
+        .animate-card-reveal { animation: card-reveal 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
         @keyframes slip-in {
-          0% { opacity: 0; transform: translateY(-20px); }
-          100% { opacity: 1; transform: translateY(0); }
+          0% { opacity: 0; transform: translateY(-16px) scale(0.95); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
         }
-        .animate-slip-in { animation: slip-in 0.3s ease-out; }
+        .animate-slip-in { animation: slip-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
       `}</style>
 
       <div className="p-6 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold text-zinc-900 mb-8">Punishment Jar</h1>
 
-        {/* ── Jar + Draw ── */}
+        {/* ── Machine + Draw ── */}
         <div className="flex flex-col items-center mb-8">
-          <JarVisual slipCount={undrawn.length} shaking={isDrawing} />
-
-          <Button
-            onClick={handleDraw}
+          <GachaMachine
+            slipCount={undrawn.length}
+            shaking={isDrawing}
+            onDraw={handleDraw}
             disabled={undrawn.length === 0 || isDrawing || !canEdit}
-            className="mt-5 gap-2"
-          >
-            <Dices className="h-4 w-4" />
-            {isDrawing ? '抽签中...' : '抽签'}
-          </Button>
+          />
 
           {!canEdit && (
             <p className="mt-2 text-xs text-zinc-400">
@@ -307,7 +409,7 @@ export default function PunishmentJarPage() {
               />
               <Button type="submit" disabled={!newText.trim()} className="gap-1.5">
                 <Plus className="h-4 w-4" />
-                投入罐子
+                投入
               </Button>
             </div>
             <label className="flex items-center gap-2 cursor-pointer select-none group">
