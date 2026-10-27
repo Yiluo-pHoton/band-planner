@@ -98,6 +98,17 @@ export interface SongOpinion {
   opinion: SongOpinionType;
 }
 
+export interface Punishment {
+  id: string;
+  text: string;
+  submittedBy: string;     // Firebase Auth UID — for edit/delete ownership
+  submitterName: string;   // display name snapshot at submission time
+  drawnAt?: string;        // ISO 8601 — set when drawn; doubles as "revealed" flag
+  isHiddenTask?: boolean;  // true = must complete before next rehearsal or get punished again
+  completedAt?: string;    // ISO 8601 — when the hidden task was marked done
+  createdAt: string;       // ISO 8601
+}
+
 export interface PersistedState {
   schemaVersion: number;
   songs: Song[];
@@ -108,4 +119,5 @@ export interface PersistedState {
   shows: Show[];
   songOpinions?: SongOpinion[];  // optional for backward compat
   rehearsalDays?: number[];      // each 0=Sun .. 6=Sat; absent => [6] (Saturday)
+  punishments?: Punishment[];    // optional for backward compat with v7 data
 }

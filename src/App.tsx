@@ -15,8 +15,9 @@ import ShowDetailPage from '@/pages/ShowDetailPage';
 import WhoNeedsToComePage from '@/pages/WhoNeedsToComePage';
 import AdminPage from '@/pages/AdminPage';
 import SongMatrixPage from '@/pages/SongMatrixPage';
+import PunishmentJarPage from '@/pages/PunishmentJarPage';
 
-const VALID_TABS: TabKey[] = ['songs','members','memberSongs','availability','rehearsal','history','shows','whoNeeds','matrix','admin'];
+const VALID_TABS: TabKey[] = ['songs','members','memberSongs','availability','rehearsal','history','shows','whoNeeds','matrix','punishmentJar','admin'];
 
 function tabFromHash(): TabKey | null {
   const h = window.location.hash.replace('#', '');
@@ -130,6 +131,7 @@ export default function App() {
               {tab === 'whoNeeds' && <WhoNeedsToComePage />}
               {tab === 'shows' && <ShowsPage onSelectShow={openShowDetail} />}
               {tab === 'matrix' && <SongMatrixPage />}
+              {tab === 'punishmentJar' && <PunishmentJarPage />}
               {tab === 'admin' && <AdminPage />}
             </>
           )}

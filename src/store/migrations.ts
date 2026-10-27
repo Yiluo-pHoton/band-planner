@@ -72,6 +72,12 @@ export const migrations: Migration[] = [
         : m.instruments,
     })),
   }),
+  // index 7: v7 -> v8. Add punishments array for the punishment jar.
+  (data) => ({
+    ...data,
+    schemaVersion: 8,
+    punishments: data?.punishments ?? [],
+  }),
 ];
 
 export function migrate(raw: any): PersistedState {

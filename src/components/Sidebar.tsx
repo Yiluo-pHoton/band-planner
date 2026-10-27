@@ -1,10 +1,10 @@
 import * as React from 'react';
-import { CalendarCheck, CalendarRange, ClipboardList, Download, History, ListMusic, LogIn, LogOut, Mail, Music, Shield, Table2, Ticket, Upload, Users, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, CalendarRange, ClipboardList, Dices, Download, History, ListMusic, LogIn, LogOut, Mail, Music, Shield, Table2, Ticket, Upload, Users, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { exportAllData, importAllData } from '@/lib/dataTransfer';
 import { useAuthContext } from '@/store/AuthContext';
 
-export type TabKey = 'songs' | 'members' | 'memberSongs' | 'availability' | 'rehearsal' | 'history' | 'shows' | 'whoNeeds' | 'matrix' | 'admin';
+export type TabKey = 'songs' | 'members' | 'memberSongs' | 'availability' | 'rehearsal' | 'history' | 'shows' | 'whoNeeds' | 'matrix' | 'punishmentJar' | 'admin';
 
 interface NavItem {
   key: TabKey;
@@ -21,6 +21,7 @@ const NAV: NavItem[] = [
   { key: 'rehearsal', label: '排练规划', icon: CalendarCheck },
   { key: 'history', label: '排练历史', icon: History },
   { key: 'shows', label: '演出', icon: Ticket },
+  { key: 'punishmentJar', label: 'Punishment Jar', icon: Dices },
 ];
 
 interface SidebarProps {

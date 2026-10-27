@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { Assignment, Availability, Member, PersistedState, Rehearsal, Show, Song, SongOpinionType } from '@/types';
+import type { Assignment, Availability, Member, PersistedState, Punishment, Rehearsal, Show, Song, SongOpinionType } from '@/types';
 import { loadState, saveState, saveToFirestore, subscribeFirestore } from '@/store/persist';
 
 // Action types are union-typed so the reducer is exhaustive.
@@ -24,6 +24,10 @@ type Action =
   | { type: 'shows/delete'; id: string }
   | { type: 'songOpinions/set'; songId: string; memberId: string; opinion: SongOpinionType | null }
   | { type: 'settings/rehearsalDays'; days: number[] }
+  | { type: 'punishments/add'; punishment: Punishment }
+  | { type: 'punishments/update'; punishment: Punishment }
+  | { type: 'punishments/delete'; id: string }
+  | { type: 'punishments/draw'; id: string; drawnAt: string }
   | { type: 'sync'; state: PersistedState };
 
 function reducer(state: PersistedState, action: Action): PersistedState {
@@ -205,6 +209,31 @@ function reducer(state: PersistedState, action: Action): PersistedState {
     case 'settings/rehearsalDays':
       return { ...state, rehearsalDays: action.days };
 
+    case 'punishments/add':
+      return { ...state, punishments: [...(state.punishments ?? []), action.punishment] };
+
+    case 'punishments/update':
+      return {
+        ...state,
+        punishments: (state.punishments ?? []).map((p) =>
+          p.id === action.punishment.id ? action.punishment : p,
+        ),
+      };
+
+    case 'punishments/delete':
+      return {
+        ...state,
+        punishments: (state.punishments ?? []).filter((p) => p.id !== action.id),
+      };
+
+    case 'punishments/draw':
+      return {
+        ...state,
+        punishments: (state.punishments ?? []).map((p) =>
+          p.id === action.id ? { ...p, drawnAt: action.drawnAt } : p,
+        ),
+      };
+
     case 'sync':
       return action.state;
 
@@ -235,6 +264,10 @@ interface AppContextValue {
   deleteShow: (id: string) => void;
   setSongOpinion: (songId: string, memberId: string, opinion: SongOpinionType | null) => void;
   setRehearsalDays: (days: number[]) => void;
+  addPunishment: (punishment: Punishment) => void;
+  updatePunishment: (punishment: Punishment) => void;
+  deletePunishment: (id: string) => void;
+  drawPunishment: (id: string) => void;
 }
 
 const AppContext = React.createContext<AppContextValue | null>(null);
@@ -310,9 +343,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSongOpinion: (songId, memberId, opinion) =>
         dispatch({ type: 'songOpinions/set', songId, memberId, opinion }),
       setRehearsalDays: (days) => dispatch({ type: 'settings/rehearsalDays', days }),
+      addPunishment: (punishment) => dispatch({ type: 'punishments/add', punishment }),
+      updatePunishment: (punishment) => dispatch({ type: 'punishments/update', punishment }),
+      deletePunishment: (id) => dispatch({ type: 'punishments/delete', id }),
+      drawPunishment: (id) =>
+        dispatch({ type: 'punishments/draw', id, drawnAt: new Date().toISOString() }),
     }),
     [state],
   );
+
+  // DEV ONLY: expose context for console import script. Remove after import.
+  React.useEffect(() => {
+    (window as any).__bandApp = value;
+    return () => { delete (window as any).__bandApp; };
+  }, [value]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
