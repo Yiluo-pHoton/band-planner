@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Check, CircleHelp, Eye, Pencil, Plus, Trash2, Undo2 } from 'lucide-react';
+import { CircleHelp, Eye, ImagePlus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useApp } from '@/store/AppContext';
 import { useAuthContext } from '@/store/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,43 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import type { Punishment } from '@/types';
+
+// ─── Image compression helper ──────────────────────────────────
+
+const MAX_IMG_DIMENSION = 800;
+const MAX_IMG_BYTES = 200_000; // ~200KB after base64
+
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.width;
+      let h = img.height;
+      if (w > MAX_IMG_DIMENSION || h > MAX_IMG_DIMENSION) {
+        const ratio = Math.min(MAX_IMG_DIMENSION / w, MAX_IMG_DIMENSION / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas not supported')); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      let quality = 0.8;
+      let dataUrl = canvas.toDataURL('image/jpeg', quality);
+      while (dataUrl.length > MAX_IMG_BYTES * 1.37 && quality > 0.1) {
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+      }
+      resolve(dataUrl);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
+    img.src = url;
+  });
+}
 
 // ─── Gacha machine visual ──────────────────────────────────────
 
@@ -210,6 +247,9 @@ function DrawnResultCard({
         <p className="text-lg font-semibold text-zinc-100 mb-4 leading-relaxed">
           {punishment.text}
         </p>
+        {punishment.imageBase64 && (
+          <img src={punishment.imageBase64} alt="附件" className="mb-4 max-h-48 rounded-lg border border-zinc-600" />
+        )}
         <p className="text-sm text-zinc-400 mb-5">
           提交者：{punishment.submitterName}
         </p>
@@ -224,23 +264,33 @@ function DrawnResultCard({
 // ─── Main page ─────────────────────────────────────────────────
 
 export default function PunishmentJarPage() {
-  const { state, addPunishment, updatePunishment, deletePunishment, drawPunishment } = useApp();
-  const { user, canEdit } = useAuthContext();
+  const { state, addPunishment, updatePunishment, deletePunishment } = useApp();
+  const { user } = useAuthContext();
 
   const [newText, setNewText] = React.useState('');
   const [newIsHidden, setNewIsHidden] = React.useState(false);
+  const [newImage, setNewImage] = React.useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [isDrawing, setIsDrawing] = React.useState(false);
   const [drawnResult, setDrawnResult] = React.useState<Punishment | null>(null);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editText, setEditText] = React.useState('');
 
   const punishments = state.punishments ?? [];
-  const undrawn = punishments.filter((p) => !p.drawnAt);
-  const drawn = punishments
-    .filter((p) => p.drawnAt)
-    .sort((a, b) => (b.drawnAt ?? '').localeCompare(a.drawnAt ?? ''));
 
   // ── Submit ──
+
+  const handleImagePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await compressImage(file);
+      setNewImage(dataUrl);
+    } catch {
+      console.error('Image compression failed');
+    }
+    e.target.value = '';
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -251,35 +301,31 @@ export default function PunishmentJarPage() {
       submittedBy: user.uid,
       submitterName: user.displayName ?? user.email ?? '匿名',
       isHiddenTask: newIsHidden || undefined,
+      imageBase64: newImage ?? undefined,
       createdAt: new Date().toISOString(),
     });
     setNewText('');
     setNewIsHidden(false);
+    setNewImage(null);
   };
 
   // ── Draw ──
 
+  const allSlips = punishments;
+
   const handleDraw = () => {
-    if (undrawn.length === 0 || isDrawing) return;
+    if (allSlips.length === 0 || isDrawing) return;
     setIsDrawing(true);
     setDrawnResult(null);
 
-    // Shake for ~1.5s, then reveal
+    // Shake for ~1.5s, then reveal — slip stays in the pool
     setTimeout(() => {
-      const idx = Math.floor(Math.random() * undrawn.length);
-      const picked = undrawn[idx];
+      const idx = Math.floor(Math.random() * allSlips.length);
+      const picked = allSlips[idx];
       if (!picked) { setIsDrawing(false); return; }
-      drawPunishment(picked.id);
       setDrawnResult(picked);
       setIsDrawing(false);
     }, 1500);
-  };
-
-  // ── Put back ──
-
-  const handlePutBack = (p: Punishment) => {
-    const { drawnAt: _, ...rest } = p;
-    updatePunishment({ ...rest } as Punishment);
   };
 
   // ── Edit ──
@@ -383,17 +429,11 @@ export default function PunishmentJarPage() {
         {/* ── Machine + Draw ── */}
         <div className="flex flex-col items-center mb-8">
           <GachaMachine
-            slipCount={undrawn.length}
+            slipCount={allSlips.length}
             shaking={isDrawing}
             onDraw={handleDraw}
-            disabled={undrawn.length === 0 || isDrawing || !canEdit}
+            disabled={allSlips.length === 0 || isDrawing}
           />
-
-          {!canEdit && (
-            <p className="mt-2 text-xs text-zinc-400">
-              {user ? '只有管理员和团长可以抽签' : '登录后才能使用'}
-            </p>
-          )}
         </div>
 
         {/* ── Submit form ── */}
@@ -407,11 +447,40 @@ export default function PunishmentJarPage() {
                 className="flex-1"
                 maxLength={200}
               />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImagePick}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                onClick={() => fileInputRef.current?.click()}
+                title="附图"
+              >
+                <ImagePlus className="h-4 w-4" />
+              </Button>
               <Button type="submit" disabled={!newText.trim()} className="gap-1.5">
                 <Plus className="h-4 w-4" />
                 投入
               </Button>
             </div>
+            {newImage && (
+              <div className="relative inline-block">
+                <img src={newImage} alt="附件预览" className="h-20 rounded-md border border-zinc-200" />
+                <button
+                  type="button"
+                  onClick={() => setNewImage(null)}
+                  className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-white hover:bg-red-600"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
             <label className="flex items-center gap-2 cursor-pointer select-none group">
               <input
                 type="checkbox"
@@ -435,7 +504,7 @@ export default function PunishmentJarPage() {
         {/* ── My undrawn submissions ── */}
         <section className="mb-8">
           {user && (() => {
-            const myUndrawn = undrawn.filter((p) => isOwner(p));
+            const myUndrawn = punishments.filter((p) => isOwner(p));
             if (myUndrawn.length === 0) return null;
             return (
               <div className="mt-4">
@@ -466,6 +535,9 @@ export default function PunishmentJarPage() {
                         <>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-zinc-900">{p.text}</p>
+                            {p.imageBase64 && (
+                              <img src={p.imageBase64} alt="附件" className="mt-1.5 h-16 rounded border border-zinc-200" />
+                            )}
                           </div>
                           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Button
@@ -495,80 +567,6 @@ export default function PunishmentJarPage() {
           })()}
         </section>
 
-        {/* ── Drawn list ── */}
-        {drawn.length > 0 && (
-          <section>
-            <h2 className="text-lg font-semibold text-zinc-900 mb-3">
-              已抽出
-              <span className="ml-2 text-sm font-normal text-zinc-400">{drawn.length}</span>
-            </h2>
-
-            <div className="space-y-2">
-              {drawn.map((p) => {
-                const isIncompleteHidden = p.isHiddenTask && !p.completedAt;
-                return (
-                  <div
-                    key={p.id}
-                    className={`group flex items-center gap-3 rounded-lg border px-4 py-3 ${
-                      isIncompleteHidden
-                        ? 'border-amber-200 bg-amber-50'
-                        : 'border-zinc-200 bg-white'
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm text-zinc-900">{p.text}</p>
-                        {p.isHiddenTask && (
-                          <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                            p.completedAt
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : 'bg-violet-100 text-violet-700'
-                          }`}>
-                            <Eye className="h-2.5 w-2.5" />
-                            {p.completedAt ? '已完成' : '隐藏任务'}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-zinc-500 mt-0.5">
-                        提交者：{p.submitterName}
-                        <span className="mx-1.5 text-zinc-300">·</span>
-                        {p.drawnAt ? new Date(p.drawnAt).toLocaleDateString('zh-CN') : ''}
-                        {isIncompleteHidden && (
-                          <span className="ml-1.5 text-amber-600">· 下次排练前需完成</span>
-                        )}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {isIncompleteHidden && canEdit && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
-                          onClick={() => updatePunishment({ ...p, completedAt: new Date().toISOString() })}
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                          完成
-                        </Button>
-                      )}
-                      {canEdit && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1"
-                          onClick={() => handlePutBack(p)}
-                        >
-                          <Undo2 className="h-3.5 w-3.5" />
-                          放回
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
       </div>
 
       {/* ── Delete confirmation dialog ── */}

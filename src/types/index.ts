@@ -106,6 +106,7 @@ export interface Punishment {
   drawnAt?: string;        // ISO 8601 — set when drawn; doubles as "revealed" flag
   isHiddenTask?: boolean;  // true = must complete before next rehearsal or get punished again
   completedAt?: string;    // ISO 8601 — when the hidden task was marked done
+  imageBase64?: string;    // optional image attachment, base64-encoded data URL
   createdAt: string;       // ISO 8601
 }
 
